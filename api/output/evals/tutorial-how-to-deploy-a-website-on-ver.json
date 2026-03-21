@@ -1,0 +1,42 @@
+{
+  "title": "How to Deploy a Website on Vercel with a Custom Domain",
+  "url": "https://vercel.com",
+  "source": "Vercel Official Documentation and Knowledge Base",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Sign Up and Create Vercel Account",
+      "description": "<cite index=\"3-7,17-19\">Visit vercel.com and click the sign-up button located at the top right corner of the home page, then choose to continue with GitHub</cite>. This automatically connects your GitHub account and makes the deployment process much smoother. <cite index=\"3-8,3-9\">Choose your plan type, input your name, then click Continue to proceed</cite>."
+    },
+    {
+      "step": 2,
+      "title": "Connect Your GitHub Repository",
+      "description": "<cite index=\"12-13,12-14,12-15\">In the Vercel dashboard, click the New Project button and you'll be prompted to connect a GitHub repository, so click Import GitHub Repository</cite>. <cite index=\"12-16,12-17\">Authorize Vercel to access your GitHub account if you haven't already, then from the list of repositories choose the project you want to deploy</cite>. This creates the automatic deployment pipeline between GitHub and Vercel."
+    },
+    {
+      "step": 3,
+      "title": "Deploy Your Project",
+      "description": "<cite index=\"14-20,14-21,14-22\">Choose your project's framework like Next.js or React and click deploy - Vercel will automatically compile and host your site</cite>. <cite index=\"11-1\">Vercel for GitHub automatically deploys your GitHub projects providing Preview Deployment URLs and automatic Custom Domain updates</cite>. Your project will now be live at a default vercel.app URL that you can test before adding a custom domain."
+    },
+    {
+      "step": 4,
+      "title": "Add Your Custom Domain",
+      "description": "<cite index=\"6-13,6-14\">Navigate to your project's dashboard on Vercel and access Project Settings, then go to Domains and click the Add button to enter your custom domain</cite>. <cite index=\"2-6\">To add a custom domain to your project, navigate to the Domains section under the Settings tab for the project, enter the URL for your custom domain and click Add</cite>. Make sure you already own the domain you're trying to add."
+    },
+    {
+      "step": 5,
+      "title": "Configure DNS Records at Your Domain Provider",
+      "description": "<cite index=\"6-23,6-24\">For the A Record, point @ (root domain) to Vercel's IP address which is typically 76.76.21.21, but always check Vercel's documentation for the most current IP</cite>. <cite index=\"6-26,6-27\">For the CNAME Record, point www to cname.vercel-dns.com to ensure that requests to www.yourdomain.com are correctly routed</cite>. These settings are done in your domain provider's DNS management panel."
+    },
+    {
+      "step": 6,
+      "title": "Verify Domain Configuration",
+      "description": "<cite index=\"6-29,6-30\">After updating your DNS records, return to the Vercel dashboard and click Verify for your added domain</cite>. <cite index=\"2-9,2-10\">Once you have added your Custom Domain, you will need to verify the domain so it can be used with your Vercel Project, and the dashboard will automatically provide further instructions required for verifying your domain</cite>. <cite index=\"6-31,6-32\">DNS propagation can take a few minutes to several hours, so patience is key</cite>."
+    },
+    {
+      "step": 7,
+      "title": "Set Primary Domain and Enable HTTPS",
+      "description": "<cite index=\"6-33,6-34\">Once verified, designate your domain as the primary domain within the Vercel settings and you can optionally enable a redirect from www to your primary domain</cite>. Vercel automatically provisions SSL certificates for HTTPS, so your site will be secure by default. <cite index=\"6-16,6-17\">Congratulations! You've successfully connected your custom domain to your Vercel project and your application is now accessible at your custom URL</cite>."
+    }
+  ]
+}

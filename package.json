@@ -1,0 +1,12 @@
+{
+  "name": "showme-ai",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n api,client -c blue,magenta \"npm run dev --prefix api\" \"npm run dev --prefix client\"",
+    "api": "npm run dev --prefix api",
+    "client": "npm run dev --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

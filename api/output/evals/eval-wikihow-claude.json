@@ -1,0 +1,127 @@
+[
+  {
+    "topic": "How to set up a Google Ads campaign with conversion tracking",
+    "difficulty": "hard",
+    "steps": 10,
+    "url": "https://ads.google.com/",
+    "eval": {
+      "scores": {
+        "step_count": 10,
+        "relevance": 10,
+        "narration": 10,
+        "title_quality": 10,
+        "has_url": 10,
+        "speed": 5
+      },
+      "total": 55,
+      "max": 60,
+      "pct": 92,
+      "time_sec": "42.2"
+    },
+    "timings": {
+      "wikihow": 1872,
+      "claude": 40373,
+      "total": 42245
+    }
+  },
+  {
+    "topic": "How to deploy a website on Vercel with a custom domain",
+    "difficulty": "medium",
+    "steps": 7,
+    "url": "https://vercel.com",
+    "eval": {
+      "scores": {
+        "step_count": 10,
+        "relevance": 10,
+        "narration": 10,
+        "title_quality": 10,
+        "has_url": 10,
+        "speed": 7
+      },
+      "total": 57,
+      "max": 60,
+      "pct": 95,
+      "time_sec": "28.9"
+    },
+    "timings": {
+      "wikihow": 341,
+      "claude": 28523,
+      "total": 28864
+    }
+  },
+  {
+    "topic": "How to create a Facebook Business Page and run your first ad",
+    "difficulty": "hard",
+    "steps": 10,
+    "url": "https://www.facebook.com/pages/create",
+    "eval": {
+      "scores": {
+        "step_count": 10,
+        "relevance": 10,
+        "narration": 10,
+        "title_quality": 10,
+        "has_url": 10,
+        "speed": 7
+      },
+      "total": 57,
+      "max": 60,
+      "pct": 95,
+      "time_sec": "26.7"
+    },
+    "timings": {
+      "wikihow": 2815,
+      "claude": 23910,
+      "total": 26725
+    }
+  },
+  {
+    "topic": "How to set up a Shopify store",
+    "difficulty": "medium",
+    "steps": 8,
+    "url": "https://shopify.com/store-signup",
+    "eval": {
+      "scores": {
+        "step_count": 10,
+        "relevance": 10,
+        "narration": 10,
+        "title_quality": 10,
+        "has_url": 10,
+        "speed": 7
+      },
+      "total": 57,
+      "max": 60,
+      "pct": 95,
+      "time_sec": "25.1"
+    },
+    "timings": {
+      "wikihow": 1593,
+      "claude": 23555,
+      "total": 25148
+    }
+  },
+  {
+    "topic": "How to create a GitHub Actions CI/CD pipeline",
+    "difficulty": "hard",
+    "steps": 10,
+    "url": "https://github.com",
+    "eval": {
+      "scores": {
+        "step_count": 10,
+        "relevance": 10,
+        "narration": 10,
+        "title_quality": 10,
+        "has_url": 10,
+        "speed": 7
+      },
+      "total": 57,
+      "max": 60,
+      "pct": 95,
+      "time_sec": "24.1"
+    },
+    "timings": {
+      "wikihow": 771,
+      "claude": 23349,
+      "total": 24120
+    }
+  }
+]

@@ -1,0 +1,104 @@
+{
+  "date": "2026-03-21T12:01:37.624Z",
+  "method": "WikiHow + Claude Web Search + Playwright MCP",
+  "tests": [
+    {
+      "topic": "How to deploy a website on Vercel with a custom domain",
+      "difficulty": "medium",
+      "steps": 7,
+      "screenshots": 7,
+      "totalScreenshotKB": 2672,
+      "eval": {
+        "scores": {
+          "step_count": 10,
+          "relevance": 10,
+          "narration": 10,
+          "action_quality": 10,
+          "has_url": 10,
+          "screenshot_coverage": 10,
+          "screenshot_variety": 10,
+          "speed": 7
+        },
+        "total": 77,
+        "max": 80,
+        "pct": 96,
+        "screenshots": 7,
+        "totalScreenshotKB": 2672,
+        "time_sec": "105.8"
+      },
+      "timings": {
+        "wikihow": 1100,
+        "claude": 24547,
+        "playwright": 80116,
+        "total": 105765
+      }
+    },
+    {
+      "topic": "How to create a GitHub repository with README and license",
+      "difficulty": "easy",
+      "steps": 7,
+      "screenshots": 7,
+      "totalScreenshotKB": 5171,
+      "eval": {
+        "scores": {
+          "step_count": 10,
+          "relevance": 10,
+          "narration": 10,
+          "action_quality": 10,
+          "has_url": 10,
+          "screenshot_coverage": 10,
+          "screenshot_variety": 10,
+          "speed": 2
+        },
+        "total": 72,
+        "max": 80,
+        "pct": 90,
+        "screenshots": 7,
+        "totalScreenshotKB": 5171,
+        "time_sec": "201.7"
+      },
+      "timings": {
+        "wikihow": 1452,
+        "claude": 22010,
+        "playwright": 178267,
+        "total": 201729
+      }
+    },
+    {
+      "topic": "How to set up a Shopify store and add your first product",
+      "difficulty": "hard",
+      "steps": 8,
+      "screenshots": 8,
+      "totalScreenshotKB": 6514,
+      "eval": {
+        "scores": {
+          "step_count": 10,
+          "relevance": 10,
+          "narration": 10,
+          "action_quality": 10,
+          "has_url": 10,
+          "screenshot_coverage": 10,
+          "screenshot_variety": 10,
+          "speed": 2
+        },
+        "total": 72,
+        "max": 80,
+        "pct": 90,
+        "screenshots": 8,
+        "totalScreenshotKB": 6514,
+        "time_sec": "281.7"
+      },
+      "timings": {
+        "wikihow": 2015,
+        "claude": 37705,
+        "playwright": 241935,
+        "total": 281655
+      }
+    }
+  ],
+  "averages": {
+    "score": 92,
+    "time_sec": "196.4",
+    "screenshots": 7
+  }
+}

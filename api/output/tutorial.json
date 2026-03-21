@@ -1,0 +1,48 @@
+{
+  "title": "How to create a GitHub repository",
+  "url": "https://github.com",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Sign in to GitHub",
+      "description": "Enter your credentials and click sign in to access GitHub.",
+      "screenshot": "step-01.jpg",
+      "video": "step-01.mp4",
+      "videoSize": 472682
+    },
+    {
+      "step": 2,
+      "title": "Click New Repository",
+      "description": "Find and click the green 'New' button on your dashboard.",
+      "screenshot": "step-02.jpg",
+      "video": "step-02.mp4",
+      "videoSize": 635570
+    },
+    {
+      "step": 3,
+      "title": "Enter Repository Name",
+      "description": "Type a unique name for your new repository.",
+      "screenshot": "step-03.jpg",
+      "video": "step-03.mp4",
+      "videoSize": 581491
+    },
+    {
+      "step": 4,
+      "title": "Configure Repository Settings",
+      "description": "Choose visibility, add description, and select initialization options.",
+      "screenshot": "step-04.jpg",
+      "video": "step-04.mp4",
+      "videoSize": 907356
+    },
+    {
+      "step": 5,
+      "title": "Create Repository",
+      "description": "Click the green 'Create repository' button to finish setup.",
+      "screenshot": "step-05.jpg",
+      "video": "step-05.mp4",
+      "videoSize": 450521
+    }
+  ],
+  "source": "WikiHow — Create a Branch on GitHub",
+  "wikiUrl": "https://www.wikihow.com/Create-a-Branch-on-GitHub"
+}

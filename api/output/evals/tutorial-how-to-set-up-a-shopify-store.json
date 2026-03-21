@@ -1,0 +1,47 @@
+{
+  "title": "How to Set Up a Shopify Store",
+  "url": "https://shopify.com/store-signup",
+  "source": "Multiple Shopify tutorials and official documentation from 2026",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Create Your Shopify Account and Start Free Trial",
+      "description": "Visit shopify.com and click 'Start free trial' to begin your 3-day free trial period. Enter your email address, create a secure password, and choose a unique store name that will become your temporary myshopify.com URL. Complete the setup questions about your business to help Shopify personalize your experience."
+    },
+    {
+      "step": 2,
+      "title": "Complete Your Store Settings and Basic Information",
+      "description": "Navigate to Settings in the bottom left of your admin dashboard and configure your store details including business name, address, currency, and time zone. Set up your legal pages like Privacy Policy and Terms of Service. Connect your domain or use the default myshopify.com address provided during setup."
+    },
+    {
+      "step": 3,
+      "title": "Choose and Customize Your Store Theme",
+      "description": "Go to Online Store > Themes in your admin panel and select from over 100 free and premium themes including the new 2026 Horizon theme collection. Customize your chosen theme using the drag-and-drop editor, adjusting colors, fonts, layout sections, and navigation menus. Use Shopify's AI-powered Sidekick assistant for design suggestions."
+    },
+    {
+      "step": 4,
+      "title": "Add Your Products and Organize Your Catalog",
+      "description": "Click Products in the left menu and select 'Add product' to upload your first items with titles, descriptions, high-resolution images (1200x1200 pixels recommended), and pricing. Set up product categories, variants like size or color, SKU information, and inventory tracking. Configure tax settings and sales channels for each product."
+    },
+    {
+      "step": 5,
+      "title": "Configure Payment Methods and Checkout",
+      "description": "Set up Shopify Payments under Settings > Payments to accept credit cards, or connect third-party payment gateways like PayPal, Stripe, or Apple Pay. Enable multiple payment options to reduce cart abandonment and configure two-factor authentication for security. Customize your checkout process and enable guest checkout for better conversions."
+    },
+    {
+      "step": 6,
+      "title": "Set Up Shipping Rates and Tax Settings",
+      "description": "Navigate to Settings > Shipping and delivery to configure domestic and international shipping zones with appropriate rates. Set up free shipping thresholds, calculated shipping, or flat rates based on your business model. Configure automatic tax calculations under Settings > Taxes to ensure legal compliance."
+    },
+    {
+      "step": 7,
+      "title": "Install Essential Apps and Optimize for Mobile",
+      "description": "Browse the Shopify App Store to install essential apps for SEO optimization, email marketing, customer reviews, and analytics. Ensure your store is mobile-optimized by testing the responsive design and loading speeds. Add apps for social media integration and inventory management if needed."
+    },
+    {
+      "step": 8,
+      "title": "Test Your Store and Launch",
+      "description": "Thoroughly test all functionality including product pages, checkout process, payment methods, and mobile responsiveness before going live. Review your store setup checklist, optimize page loading speeds, and ensure all links work properly. Remove the password protection and officially launch your store to start accepting orders."
+    }
+  ]
+}

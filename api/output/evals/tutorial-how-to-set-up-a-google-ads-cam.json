@@ -1,0 +1,57 @@
+{
+  "title": "How to Set Up Google Ads Campaign with Conversion Tracking (2026)",
+  "url": "https://ads.google.com/",
+  "source": "Google Ads official documentation and industry best practices",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Access Google Ads Account and Navigate to Conversions",
+      "description": "<cite index='7-2,19-1'>Log into your Google Ads account and navigate to the Goals section in the left menu, or click the tools icon in the upper right corner.</cite> <cite index='7-3,19-4'>Click Conversions, then Summary to access your conversion tracking hub.</cite> This is where you'll create, manage, and monitor all conversion actions for your campaigns."
+    },
+    {
+      "step": 2,
+      "title": "Create a New Conversion Action",
+      "description": "<cite index='7-44,19-6'>Click the blue plus button to create a new conversion action.</cite> <cite index='7-46,19-8'>Select 'Website' as your conversion source since you're tracking actions that happen on your site.</cite> <cite index='18-8,19-11'>Give your conversion action a clear, descriptive name like 'Purchase Completed' or 'Demo Request Submitted'.</cite>"
+    },
+    {
+      "step": 3,
+      "title": "Configure Conversion Settings and Values",
+      "description": "<cite index='18-10,18-11,18-12'>Set your conversion value - choose between a static value (same amount for every conversion) or dynamic value (tracks actual transaction amounts).</cite> <cite index='18-14,18-15,18-17'>Configure your conversion windows with 30 days click-through and 1 day view-through as a solid starting point.</cite> <cite index='18-18'>Under attribution model, stick with data-driven if available.</cite>"
+    },
+    {
+      "step": 4,
+      "title": "Install Google Tag and Event Snippet",
+      "description": "<cite index='20-5,20-7'>After creating the conversion action, you need to install a Google tag on your website.</cite> <cite index='11-8,11-9'>Activate measurement with a Google tag if you don't already have one by selecting Set up on the Google tag.</cite> <cite index='11-10,11-11'>Measure your individual conversions with an event snippet by selecting See event snippet for instructions.</cite>"
+    },
+    {
+      "step": 5,
+      "title": "Implement Tracking via Google Tag Manager (Recommended)",
+      "description": "<cite index='18-29,18-31'>The cleanest approach is Google Tag Manager, which acts as a container that holds all your tracking tags without requiring you to edit website code every time.</cite> <cite index='18-33,18-34'>Grab your Google Ads Conversion ID and Conversion Label, then create a new tag in GTM, select Google Ads Conversion Tracking as the tag type, and paste in your IDs.</cite> <cite index='14-1,14-2'>Add all required parameters like currency, conversion value, and configure the appropriate trigger for this tag.</cite>"
+    },
+    {
+      "step": 6,
+      "title": "Enable Enhanced Conversions",
+      "description": "<cite index='13-14,13-15,13-16'>Go to Tools and Settings, then Conversions, then Settings, and under Enhanced conversions click Turn on enhanced conversions.</cite> <cite index='13-17,13-18'>Accept the Customer Data Terms and select Google Tag Manager as your implementation method.</cite> <cite index='2-15,2-16'>Enhanced conversions are the single most impactful improvement you can make to your conversion tracking accuracy in 2026.</cite>"
+    },
+    {
+      "step": 7,
+      "title": "Configure User-Provided Data in GTM",
+      "description": "<cite index='13-22,13-23'>Tell GTM where to find the user's data on your conversion pages using automatic collection or manual configuration.</cite> <cite index='13-25,13-26'>In your Google Ads Conversion Tracking tag, find the User-provided data section, select Manual configuration and map each variable to the corresponding field like email, phone, and address data.</cite> This enhances tracking accuracy by securely sending hashed first-party data to Google."
+    },
+    {
+      "step": 8,
+      "title": "Test Your Conversion Tracking Setup",
+      "description": "<cite index='18-42,18-43,18-44'>Install Google Tag Assistant Chrome extension, visit your website and complete a test conversion to see if your conversion tag fires correctly.</cite> <cite index='13-28,13-29,13-30'>Use GTM Preview mode to test by submitting a test conversion and inspecting the tag to ensure user-provided data variables are populated.</cite> <cite index='18-45'>Look for a green checkmark next to your conversion tag - that means it worked.</cite>"
+    },
+    {
+      "step": 9,
+      "title": "Verify Tracking in Google Ads",
+      "description": "<cite index='19-25,19-26'>Check your conversion tracking status in the Google Ads conversions page - a green checkmark means everything's working, while a yellow warning means the tag is installed but needs 24-48 hours to record conversions.</cite> <cite index='13-33,13-34'>In Google Ads, verify enhanced conversions are working by going to Tools and Settings, then Conversions, selecting your conversion action, and checking the Diagnostics tab for Enhanced conversions: Active.</cite>"
+    },
+    {
+      "step": 10,
+      "title": "Monitor and Optimize Performance",
+      "description": "<cite index='16-30,16-31,16-32'>Set up various reporting columns in your Google Ads account under Goals → Conversions → Summary to monitor metrics like cost per conversion and conversion rates.</cite> <cite index='19-20,19-21,19-22'>Google's Smart Bidding strategies like Target CPA and Target ROAS use this conversion data as machine learning training data to improve campaign performance.</cite> <cite index='7-15,7-16'>When Google knows which clicks lead to revenue, it optimizes your campaigns automatically with better targeting, lower costs, and higher ROI.</cite>"
+    }
+  ]
+}

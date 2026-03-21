@@ -1,0 +1,57 @@
+{
+  "title": "How to create a GitHub Actions CI/CD pipeline",
+  "url": "https://github.com",
+  "source": "GitHub official documentation and current best practices from 2026",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Navigate to your GitHub repository",
+      "description": "Go to your existing GitHub repository in your web browser where you want to set up the CI/CD pipeline. If you don't have a repository yet, create a new one by clicking the 'New' button on your GitHub dashboard and follow the prompts."
+    },
+    {
+      "step": 2,
+      "title": "Access the Actions tab",
+      "description": "Click on the 'Actions' tab at the top of your repository page. GitHub will automatically detect your project's language and suggest pre-configured workflow templates that match your technology stack."
+    },
+    {
+      "step": 3,
+      "title": "Create the workflow directory structure",
+      "description": "Either use the GitHub interface to set up a workflow, or manually create the required directory structure. In your repository, you need to create a '.github/workflows' directory at the root level where all workflow files will be stored."
+    },
+    {
+      "step": 4,
+      "title": "Create your workflow YAML file",
+      "description": "Create a new file with a '.yml' extension in the '.github/workflows' directory, such as 'ci-cd.yml'. This YAML file will define your entire CI/CD pipeline configuration including triggers, jobs, and steps."
+    },
+    {
+      "step": 5,
+      "title": "Define workflow triggers and basic structure",
+      "description": "In your YAML file, start by naming your workflow and defining when it should run using the 'on' keyword. Common triggers include push events to main branch and pull requests, which will automatically start your pipeline when code changes occur."
+    },
+    {
+      "step": 6,
+      "title": "Configure jobs and runner environment",
+      "description": "Set up your jobs section specifying the operating system (like ubuntu-latest) where your pipeline will run. Each job contains a series of steps that will execute sequentially, starting typically with checking out your repository code."
+    },
+    {
+      "step": 7,
+      "title": "Add essential pipeline steps",
+      "description": "Include key steps like code checkout using 'actions/checkout@v4', setting up your programming language runtime, installing dependencies, running tests, and performing code quality checks like linting or security scans."
+    },
+    {
+      "step": 8,
+      "title": "Configure deployment and secrets",
+      "description": "If you need deployment, add deployment steps and configure repository secrets for sensitive information like API keys or deployment credentials. Go to repository Settings > Secrets and variables > Actions to add encrypted secrets."
+    },
+    {
+      "step": 9,
+      "title": "Test and monitor your pipeline",
+      "description": "Commit and push your workflow file to trigger the first pipeline run. Monitor the execution in the Actions tab where you can see real-time logs, debug any failures, and verify that all steps complete successfully."
+    },
+    {
+      "step": 10,
+      "title": "Optimize and maintain your pipeline",
+      "description": "Once working, optimize your pipeline by adding caching for dependencies, matrix builds for multiple environments, and status badges to your README. Regularly update action versions and adjust the pipeline as your project evolves."
+    }
+  ]
+}

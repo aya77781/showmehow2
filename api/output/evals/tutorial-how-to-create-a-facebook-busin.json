@@ -1,0 +1,57 @@
+{
+  "title": "How to Create a Facebook Business Page and Run Your First Ad",
+  "url": "https://www.facebook.com/pages/create",
+  "source": "Meta Business Help Center and current 2026 guides",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Create Your Facebook Business Account",
+      "description": "Before setting up a business page, you need a personal Facebook account as the foundation. Go to Facebook.com and sign up if you don't have an account, ensuring you use your real name and email address for account verification."
+    },
+    {
+      "step": 2,
+      "title": "Access the Create Page Feature",
+      "description": "Log into your Facebook account and navigate to facebook.com/pages or click the nine-dot menu in the upper right corner. Select 'Page' from the 'Create' section to begin setting up your business page."
+    },
+    {
+      "step": 3,
+      "title": "Enter Basic Business Information",
+      "description": "Fill in your business name, select the appropriate category that describes your business, and write a compelling description up to 255 characters. Choose a memorable business name and include relevant keywords in your description to help customers find you."
+    },
+    {
+      "step": 4,
+      "title": "Add Contact Details and Business Information",
+      "description": "Include your business phone number, email address, website URL, and physical address if applicable. Also add your hours of operation so customers know when you're available for contact and service."
+    },
+    {
+      "step": 5,
+      "title": "Upload Profile and Cover Photos",
+      "description": "Add a profile photo (170x170 pixels, typically your logo) and a cover image (851x315 pixels) that represents your brand. Ensure both images are high-quality and consistently branded across all platforms for better recognition."
+    },
+    {
+      "step": 6,
+      "title": "Complete Your About Section and Publish",
+      "description": "Fill out additional business details in the About section, including your story, mission, and services offered. Review all information for accuracy, then click 'Create Page' to publish your business page and make it live."
+    },
+    {
+      "step": 7,
+      "title": "Set Up Meta Business Manager for Advertising",
+      "description": "Go to business.facebook.com and create a Business Manager account using your business email. Add your Facebook page to Business Manager and create an ad account by going to People and Assets > Ad Accounts > Create New Ad Account."
+    },
+    {
+      "step": 8,
+      "title": "Access Meta Ads Manager and Create Campaign",
+      "description": "Navigate to Ads Manager through Business Manager or directly at facebook.com/ads/manager. Click the green 'Create' button to start your first campaign and select your campaign objective based on your business goals like brand awareness, traffic, or conversions."
+    },
+    {
+      "step": 9,
+      "title": "Set Up Ad Set with Targeting and Budget",
+      "description": "Define your target audience by location, demographics, interests, and behaviors. Set your daily or lifetime budget, choose ad placements (Facebook, Instagram, etc.), and schedule when your ads will run to reach your ideal customers."
+    },
+    {
+      "step": 10,
+      "title": "Create Your Ad Creative and Launch",
+      "description": "Upload your ad images or videos, write compelling ad copy with a clear call-to-action, and add your website URL or destination. Review all settings, submit for approval, and your ad will typically be reviewed and go live within 24 hours."
+    }
+  ]
+}

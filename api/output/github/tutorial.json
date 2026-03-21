@@ -1,0 +1,54 @@
+{
+  "title": "How to Create a GitHub Repository",
+  "url": "https://github.com/new",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Go to github.com/new",
+      "description": "Open your web browser and navigate to github.com/new. Since you need to be signed in, GitHub will show the login page first. This is where you will enter your credentials to access the repository creation form.",
+      "screenshot": "step-01.png"
+    },
+    {
+      "step": 2,
+      "title": "Enter Your Username",
+      "description": "Locate the Username or email address field at the top of the form. Click on it and type your GitHub username or the email address associated with your account. This field is highlighted in red in the screenshot.",
+      "screenshot": "step-02.png"
+    },
+    {
+      "step": 3,
+      "title": "Enter Your Password",
+      "description": "Next, click on the Password field below the username. Type your GitHub password carefully. If you have forgotten your password, you can click the Forgot password link to reset it.",
+      "screenshot": "step-03.png"
+    },
+    {
+      "step": 4,
+      "title": "Click Sign In",
+      "description": "After entering both your username and password, click the green Sign In button. GitHub will verify your credentials and redirect you to the new repository creation page at github.com/new.",
+      "screenshot": "step-04.png"
+    },
+    {
+      "step": 5,
+      "title": "Create an Account (New Users)",
+      "description": "If you do not have a GitHub account yet, click the Create an account link at the bottom of the form. GitHub will guide you through the signup process. You will need a valid email address to register.",
+      "screenshot": "step-05.png"
+    },
+    {
+      "step": 6,
+      "title": "Alternative Sign-In Options",
+      "description": "GitHub also supports signing in with Google, Apple, or a passkey for faster access. These alternative methods are shown below the traditional login form. Choose the method that is most convenient for you.",
+      "screenshot": "step-06.png"
+    },
+    {
+      "step": 7,
+      "title": "Sign Up for GitHub",
+      "description": "The GitHub signup page walks you through creating your account step by step. You will enter your email, create a password, choose a username, and verify your account. Once signed up, navigate back to github.com/new to create your repository.",
+      "screenshot": "step-07.png"
+    },
+    {
+      "step": 8,
+      "title": "The Repository Creation Form",
+      "description": "After signing in, you will see the Create a new repository form. Fill in the repository name, add an optional description, choose Public or Private visibility, and check Add a README file. Finally click the green Create repository button to finish.",
+      "screenshot": "step-08.png"
+    }
+  ]
+}

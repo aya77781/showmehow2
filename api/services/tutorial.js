@@ -3,6 +3,7 @@ const { fal } = require('@fal-ai/client');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const sharp = require('sharp');
 
 const client = new Anthropic();
 if (process.env.FAL_KEY) {
@@ -334,6 +335,117 @@ Reply ONLY with the number (1-${topIndices.length}):`,
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Annotate screenshot — Claude identifies region, Sharp draws highlight
+// ═══════════════════════════════════════════════════════════════
+async function annotateScreenshot(step, imgDir, tutorialTitle, emit) {
+  const stepNum = String(step.step).padStart(2, '0');
+  const mainFile = `step-${stepNum}.png`;
+  const mainPath = path.join(imgDir, mainFile);
+  if (!fs.existsSync(mainPath)) return;
+
+  const buf = fs.readFileSync(mainPath);
+  const metadata = await sharp(buf).metadata();
+  const imgW = metadata.width || 1280;
+  const imgH = metadata.height || 720;
+
+  // Ask Claude to identify the UI region to highlight
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 150,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
+          },
+          {
+            type: 'text',
+            text: `TUTORIAL: "${tutorialTitle || ''}"
+STEP ${step.step}: "${step.title}" — "${step.description || ''}"
+
+Look at this screenshot. Identify the EXACT UI element the user should interact with in this step (button, input field, menu item, link, etc.).
+
+Give me the bounding box as percentages of the image dimensions.
+Reply in this EXACT format (no other text):
+BOX: x1%,y1%,x2%,y2%
+LABEL: short label (2-4 words)
+
+Example:
+BOX: 65%,8%,82%,14%
+LABEL: New Repository button
+
+If no specific element can be identified, reply: NONE`,
+          },
+        ],
+      }],
+    });
+
+    const text = response.content[0].text.trim();
+    if (text === 'NONE' || !text.includes('BOX:')) return;
+
+    const boxMatch = text.match(/BOX:\s*([\d.]+)%\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
+    const labelMatch = text.match(/LABEL:\s*(.+)/i);
+    if (!boxMatch) return;
+
+    const x1 = Math.round((parseFloat(boxMatch[1]) / 100) * imgW);
+    const y1 = Math.round((parseFloat(boxMatch[2]) / 100) * imgH);
+    const x2 = Math.round((parseFloat(boxMatch[3]) / 100) * imgW);
+    const y2 = Math.round((parseFloat(boxMatch[4]) / 100) * imgH);
+    const label = labelMatch ? labelMatch[1].trim().slice(0, 30) : '';
+
+    // Clamp coordinates
+    const bx = Math.max(0, Math.min(x1, x2));
+    const by = Math.max(0, Math.min(y1, y2));
+    const bw = Math.min(Math.abs(x2 - x1), imgW - bx);
+    const bh = Math.min(Math.abs(y2 - y1), imgH - by);
+
+    if (bw < 10 || bh < 10) return; // too small
+
+    // Draw highlight rectangle + label with Sharp SVG overlay
+    const padding = 4;
+    const strokeWidth = 3;
+    const fontSize = Math.max(14, Math.min(20, Math.round(imgH / 40)));
+    const labelH = fontSize + 10;
+    const labelW = label.length * (fontSize * 0.6) + 16;
+    const labelX = Math.min(bx, imgW - labelW);
+    const labelY = by > labelH + 4 ? by - labelH - 4 : by + bh + 4;
+
+    let svgOverlay = `<svg width="${imgW}" height="${imgH}">
+      <rect x="${bx - padding}" y="${by - padding}" width="${bw + padding * 2}" height="${bh + padding * 2}"
+            rx="6" ry="6" fill="none" stroke="#6366f1" stroke-width="${strokeWidth}" />
+      <rect x="${bx - padding - 1}" y="${by - padding - 1}" width="${bw + padding * 2 + 2}" height="${bh + padding * 2 + 2}"
+            rx="7" ry="7" fill="none" stroke="rgba(99,102,241,0.3)" stroke-width="${strokeWidth + 4}" />`;
+
+    if (label) {
+      svgOverlay += `
+      <rect x="${labelX}" y="${labelY}" width="${labelW}" height="${labelH}" rx="4" ry="4" fill="#6366f1" />
+      <text x="${labelX + 8}" y="${labelY + fontSize + 2}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${label.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`;
+    }
+
+    svgOverlay += `</svg>`;
+
+    const annotated = await sharp(buf)
+      .composite([{ input: Buffer.from(svgOverlay), gravity: 'northwest' }])
+      .png()
+      .toBuffer();
+
+    // Save annotated version as the main screenshot
+    const annotatedFile = `step-${stepNum}-annotated.png`;
+    fs.writeFileSync(path.join(imgDir, annotatedFile), annotated);
+    // Replace main with annotated
+    fs.writeFileSync(mainPath, annotated);
+
+    step.annotated = true;
+    step.highlightLabel = label;
+    emit('screenshot:annotated', { step: step.step, label });
+  } catch (err) {
+    console.error(`Annotation error step ${step.step}:`, err.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Fetch ALL step images in parallel
 // ═══════════════════════════════════════════════════════════════
 async function fetchAllImages(steps, imgDir, tutorialTitle, emit = () => {}) {
@@ -345,6 +457,14 @@ async function fetchAllImages(steps, imgDir, tutorialTitle, emit = () => {}) {
 
   const count = results.filter(Boolean).length;
   emit('research:screenshots:done', { count });
+
+  // Annotate all screenshots — highlight the key UI element
+  emit('annotation:start', { total: count });
+  await Promise.all(
+    steps.filter(s => s.screenshot).map(step => annotateScreenshot(step, imgDir, tutorialTitle, emit))
+  );
+  emit('annotation:done', {});
+
   return count;
 }
 

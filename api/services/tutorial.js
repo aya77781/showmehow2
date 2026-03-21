@@ -542,7 +542,7 @@ async function generateTTS(text, outputPath) {
 // VEED Fabric 1.0 — avatar + audio → talking head
 // ═══════════════════════════════════════════════════════════════
 async function generateTalkingClip(avatarUrl, audioPath, outputPath, emit, label) {
-  const audioUrl = await uploadToFal(audioPath, 'audio/wav');
+  const audioUrl = await uploadToFal(audioPath, 'audio/mpeg');
   emit('video:clip:progress', { label, status: 'GENERATING' });
 
   const result = await fal.subscribe('veed/fabric-1.0', {
@@ -648,7 +648,7 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   emit('tts:start', { total: narrations.length });
   const ttsResults = await Promise.all(
     narrations.map(n =>
-      generateTTS(n.text, path.join(audioDir, `${n.id}.wav`))
+      generateTTS(n.text, path.join(audioDir, `${n.id}.mp3`))
         .then(f => { emit('tts:done', { id: n.id }); return f; })
         .catch(err => { emit('tts:error', { id: n.id, error: err.message }); return null; })
     )

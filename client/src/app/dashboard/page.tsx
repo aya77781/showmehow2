@@ -591,7 +591,7 @@ export default function Dashboard() {
                   <div className="rounded-2xl overflow-hidden border border-white/10 bg-black">
                     <video
                       key={`final-${sessionId}`}
-                      src={`${API}/output/sessions/${sessionId}/videos/${finalVideo}`}
+                      src={`${API}/output/sessions/${sessionId}/${finalVideo}`}
                       controls autoPlay
                       className="w-full aspect-video"
                     />

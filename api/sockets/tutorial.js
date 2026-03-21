@@ -43,17 +43,42 @@ module.exports = function (io) {
 
         const result = await runResearch(project.topic, emit);
 
-        // Save to project
+        // Save research results
         project.sessionId = result.sessionId;
         project.tutorial = result.tutorial;
-        project.status = 'ready';
         project.stats = { phase1Time: result.stats.phase1Time };
-        await project.save();
 
         socket.emit('tutorial:ready', {
           projectId: project._id,
+          sessionId: project.sessionId,
           tutorial: project.tutorial,
           stats: project.stats,
+        });
+
+        // Auto-trigger video generation — skip manual review
+        project.status = 'video_generating';
+        await project.save();
+
+        const videoResult = await runVideoGeneration(
+          project.sessionId,
+          project.tutorial.steps,
+          project.tutorial,
+          emit
+        );
+
+        // Update project with video info
+        project.tutorial.steps = videoResult.steps;
+        project.status = 'complete';
+        project.stats.phase2Time = videoResult.time;
+        project.stats.totalTime = (project.stats.phase1Time || 0) + videoResult.time;
+        await project.save();
+
+        socket.emit('tutorial:complete', {
+          projectId: project._id,
+          sessionId: project.sessionId,
+          tutorial: project.tutorial,
+          stats: project.stats,
+          finalVideo: 'final-video.mp4',
         });
 
       } catch (err) {
@@ -102,8 +127,10 @@ module.exports = function (io) {
 
         socket.emit('tutorial:complete', {
           projectId: project._id,
+          sessionId: project.sessionId,
           tutorial: project.tutorial,
           stats: project.stats,
+          finalVideo: 'final-video.mp4',
         });
 
       } catch (err) {

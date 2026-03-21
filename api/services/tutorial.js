@@ -56,9 +56,10 @@ RULES:
 - Use web_search to find the real website/app for this topic
 - 8-12 steps — each step is ONE micro-action (click one button, fill one field, etc.)
 - Each description must be EXACTLY 5-10 words — short enough for a 2-second voiceover
-- imageQuery must be ULTRA-SPECIFIC: "[SiteName] [exact page name] [exact UI element] screenshot interface"
-  Example: "GitHub new repository page name input field screenshot"
-  Example: "Gmail compose window subject line text field screenshot"
+- imageQuery must be ULTRA-SPECIFIC: "[SiteName] [exact page name] [exact UI element] screenshot 2025"
+  Example: "GitHub new repository page name input field screenshot 2025"
+  Example: "Gmail compose window subject line text field screenshot 2025"
+- ALWAYS include "2025" or "2024" in imageQuery to get the LATEST modern UI — never search for old designs
 - Every step MUST have a different imageQuery — never repeat the same query
 - Steps should show DIFFERENT screens/sections of the UI
 
@@ -100,33 +101,29 @@ function detectMime(buf) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Serper image search → save ALL candidates, Claude picks best
+// Serper image search — two queries for diversity, download all
 // ═══════════════════════════════════════════════════════════════
-async function fetchStepImages(step, imgDir, emit) {
-  const stepNum = String(step.step).padStart(2, '0');
-  const query = step.imageQuery || `${step.title} screenshot interface`;
-  emit('screenshot:search', { step: step.step, query });
-
+async function searchAndDownload(query, maxResults = 10) {
   const res = await fetch('https://google.serper.dev/images', {
     method: 'POST',
     headers: {
       'X-API-KEY': process.env.SERPER_API_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ q: query, gl: 'us', hl: 'en', num: 10 }),
+    body: JSON.stringify({ q: query, gl: 'us', hl: 'en', num: maxResults, tbs: 'qdr:y2' }),
   });
-
-  if (!res.ok) return false;
+  if (!res.ok) return [];
   const data = await res.json();
-  const images = (data.images || []).slice(0, 10);
+  return (data.images || []).slice(0, maxResults);
+}
 
-  // Download ALL in parallel
+async function downloadImages(images) {
   const downloads = await Promise.allSettled(
     images.map(img =>
       fetch(img.imageUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
         redirect: 'follow',
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(5000),
       }).then(async r => {
         if (!r.ok) throw new Error('not ok');
         const buf = Buffer.from(await r.arrayBuffer());
@@ -135,20 +132,50 @@ async function fetchStepImages(step, imgDir, emit) {
       })
     )
   );
-
-  const candidates = downloads
+  return downloads
     .filter(d => d.status === 'fulfilled')
     .map(d => d.value)
     .filter(buf => {
       const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8;
       const isPng = buf[0] === 0x89 && buf[1] === 0x50;
       return isJpeg || isPng;
-    })
-    .slice(0, 6);
+    });
+}
 
+// ═══════════════════════════════════════════════════════════════
+// Claude Vision — single call: pick best + mark valid/invalid
+// ═══════════════════════════════════════════════════════════════
+async function fetchStepImages(step, imgDir, tutorialTitle, emit) {
+  const stepNum = String(step.step).padStart(2, '0');
+
+  // Two search queries for more diversity
+  const primaryQuery = step.imageQuery || `${step.title} screenshot`;
+  const fallbackQuery = `${step.title} UI screenshot tutorial 2025`;
+  emit('screenshot:search', { step: step.step, query: primaryQuery });
+
+  // Run both searches in parallel
+  const [primaryImages, fallbackImages] = await Promise.all([
+    searchAndDownload(primaryQuery, 8),
+    searchAndDownload(fallbackQuery, 6),
+  ]);
+
+  // Deduplicate by URL and merge
+  const seen = new Set();
+  const allImages = [];
+  for (const img of [...primaryImages, ...fallbackImages]) {
+    if (!seen.has(img.imageUrl)) {
+      seen.add(img.imageUrl);
+      allImages.push(img);
+    }
+  }
+
+  if (allImages.length === 0) return false;
+
+  // Download all, keep up to 8 valid JPEG/PNG
+  const candidates = (await downloadImages(allImages)).slice(0, 8);
   if (candidates.length === 0) return false;
 
-  // Save ALL candidates as step-01-c1.jpg, step-01-c2.jpg, etc.
+  // Save ALL candidates
   const candidateFiles = [];
   candidates.forEach((buf, i) => {
     const ext = buf[0] === 0x89 ? 'png' : 'jpg';
@@ -157,137 +184,167 @@ async function fetchStepImages(step, imgDir, emit) {
     candidateFiles.push(file);
   });
 
-  // Claude Vision picks the BEST image
+  // ── Single Claude Vision call: pick best + classify all ──
   let picked = 0;
+  let validCandidates = candidateFiles; // fallback: all valid
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 50,
-      messages: [{
-        role: 'user',
-        content: [
-          ...candidates.map(buf => ({
-            type: 'image',
-            source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
-          })),
-          {
-            type: 'text',
-            text: `Tutorial step: "${step.title}" — ${step.description || ''}
+      max_tokens: 300,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            ...candidates.map((buf, i) => ({
+              type: 'image',
+              source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
+            })),
+            {
+              type: 'text',
+              text: `TUTORIAL: "${tutorialTitle || ''}"
+STEP ${step.step}: "${step.title}"
+ACTION: "${step.description || ''}"
+SEARCH QUERY: "${primaryQuery}"
 
-Pick the image that BEST shows this step. It MUST be:
-1. A real screenshot of the correct website/app (not illustration, not icon, not blog)
-2. Showing the EXACT page/screen described (not homepage if step is about settings)
-3. Clear, readable, not cropped or blurry
+You are an expert image selector for video tutorials. You see ${candidates.length} candidate images numbered 1-${candidates.length}.
 
-Reply ONLY with the number (1-${candidates.length}), or 0 if none match.`,
-          },
-        ],
-      }],
+TASK 1 — CLASSIFY each image:
+For a tutorial step, the PERFECT image must be:
+✓ A REAL screenshot of the actual website/app UI (not an illustration, diagram, icon, logo, or photo of a person)
+✓ Showing the EXACT page, screen, or dialog described in this step (not the homepage when step is about a settings page)
+✓ The UI elements mentioned in the step title/description must be VISIBLE (buttons, input fields, menus, etc.)
+✓ High quality: clear, readable text, not blurry, not heavily cropped, not a tiny thumbnail
+✓ MODERN UI: must look like the current/latest version of the site (2024-2025 design). Prefer flat design, modern typography, rounded corners
+✗ REJECT: blog post thumbnails, marketing banners, stock photos, illustrations, infographics, logos, mobile screenshots when step is desktop (and vice versa), screenshots of a DIFFERENT website/app
+✗ REJECT: OLD/OUTDATED UI designs — if the screenshot looks like a 2015-2020 era design with old logos, old layouts, or deprecated features, mark it INVALID
+
+TASK 2 — PICK the single best image that most precisely matches this tutorial step.
+
+Reply in this EXACT format (no other text):
+VALID: 1,3,5
+BEST: 3
+
+If NO images are valid screenshots for this step:
+VALID: NONE
+BEST: 0`,
+            },
+          ],
+        },
+      ],
     });
 
-    const numMatch = response.content[0].text.trim().match(/\d+/);
-    const choice = numMatch ? parseInt(numMatch[0]) - 1 : 0;
-    picked = (choice >= 0 && choice < candidates.length) ? choice : 0;
-  } catch {}
+    const text = response.content[0].text.trim();
 
-  // Copy the picked candidate as the main screenshot
+    // Parse VALID line
+    const validLine = text.match(/VALID:\s*(.+)/i);
+    if (validLine) {
+      const validStr = validLine[1].trim();
+      if (validStr === 'NONE') {
+        validCandidates = [];
+      } else {
+        const validNums = validStr.match(/\d+/g)?.map(n => parseInt(n) - 1).filter(n => n >= 0 && n < candidates.length) || [];
+        if (validNums.length > 0) {
+          validCandidates = validNums.map(n => candidateFiles[n]);
+        }
+      }
+    }
+
+    // Parse BEST line
+    const bestLine = text.match(/BEST:\s*(\d+)/i);
+    if (bestLine) {
+      const choice = parseInt(bestLine[1]) - 1;
+      if (choice >= 0 && choice < candidates.length) {
+        picked = choice;
+      } else if (validCandidates.length > 0) {
+        // BEST was 0 or invalid — pick first valid
+        picked = candidateFiles.indexOf(validCandidates[0]);
+      }
+    }
+
+    // Safety: if picked image is not in validCandidates, pick first valid
+    if (validCandidates.length > 0 && !validCandidates.includes(candidateFiles[picked])) {
+      picked = candidateFiles.indexOf(validCandidates[0]);
+    }
+  } catch (err) {
+    console.error(`Vision pick error step ${step.step}:`, err.message);
+  }
+
+  // ── Double-check: Claude picks the definitive best from top valid candidates ──
+  if (validCandidates.length >= 2) {
+    try {
+      const topIndices = validCandidates
+        .map(f => candidateFiles.indexOf(f))
+        .filter(i => i >= 0)
+        .slice(0, 4); // top 4 valid candidates
+
+      const dcResponse = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: [
+            ...topIndices.map(idx => ({
+              type: 'image',
+              source: { type: 'base64', media_type: detectMime(candidates[idx]), data: candidates[idx].toString('base64') },
+            })),
+            {
+              type: 'text',
+              text: `TUTORIAL: "${tutorialTitle || ''}"
+STEP ${step.step}: "${step.title}" — "${step.description || ''}"
+
+You see ${topIndices.length} pre-validated screenshots. Pick the ONE that BEST matches this exact tutorial step.
+Criteria: clearest UI, most relevant screen, highest quality, most readable text.
+
+Reply ONLY with the number (1-${topIndices.length}):`,
+            },
+          ],
+        }],
+      });
+
+      const dcText = dcResponse.content[0].text.trim();
+      const dcMatch = dcText.match(/(\d+)/);
+      if (dcMatch) {
+        const dcChoice = parseInt(dcMatch[1]) - 1;
+        if (dcChoice >= 0 && dcChoice < topIndices.length) {
+          picked = topIndices[dcChoice];
+        }
+      }
+    } catch (err) {
+      console.error(`Double-check error step ${step.step}:`, err.message);
+    }
+  }
+
+  // Copy picked as main screenshot
   const mainFile = `step-${stepNum}.png`;
   fs.copyFileSync(path.join(imgDir, candidateFiles[picked]), path.join(imgDir, mainFile));
 
   step.screenshot = mainFile;
   step.candidates = candidateFiles;
+  step.validCandidates = validCandidates;
   step.picked = picked;
 
   emit('screenshot:done', {
     step: step.step,
     picked: picked + 1,
     total: candidates.length,
+    valid: validCandidates.length,
     candidates: candidateFiles,
   });
   return true;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Final Claude pass — discard out-of-context candidates
-// ═══════════════════════════════════════════════════════════════
-async function validateCandidates(steps, imgDir, emit) {
-  const stepsWithCandidates = steps.filter(s => s.candidates?.length > 0);
-  if (stepsWithCandidates.length === 0) return;
-
-  emit('validation:start', { total: stepsWithCandidates.length });
-
-  // Validate each step's candidates in parallel
-  await Promise.all(stepsWithCandidates.map(async (step) => {
-    const stepNum = String(step.step).padStart(2, '0');
-    const bufs = step.candidates.map(f => fs.readFileSync(path.join(imgDir, f)));
-
-    try {
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 100,
-        messages: [{
-          role: 'user',
-          content: [
-            ...bufs.map(buf => ({
-              type: 'image',
-              source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
-            })),
-            {
-              type: 'text',
-              text: `Tutorial step: "${step.title}" — ${step.description || ''}
-
-You see ${bufs.length} candidate images. Which ones are RELEVANT to this tutorial step?
-A relevant image must be a real screenshot/UI of the correct website/app showing the described action.
-Discard: illustrations, icons, unrelated pages, blog posts, marketing images.
-
-Reply with ONLY the numbers of RELEVANT images, comma-separated. Example: 1,3,5
-If NONE are relevant, reply: NONE`,
-            },
-          ],
-        }],
-      });
-
-      const text = response.content[0].text.trim();
-      if (text === 'NONE') {
-        step.validCandidates = [];
-      } else {
-        const nums = text.match(/\d+/g)?.map(n => parseInt(n) - 1).filter(n => n >= 0 && n < step.candidates.length) || [];
-        step.validCandidates = nums.map(n => step.candidates[n]);
-        // If picked candidate was discarded, re-pick from valid ones
-        if (step.validCandidates.length > 0 && !step.validCandidates.includes(step.candidates[step.picked])) {
-          const newPicked = step.candidates.indexOf(step.validCandidates[0]);
-          step.picked = newPicked;
-          const mainFile = `step-${stepNum}.png`;
-          fs.copyFileSync(path.join(imgDir, step.validCandidates[0]), path.join(imgDir, mainFile));
-          step.screenshot = mainFile;
-        }
-      }
-    } catch {
-      step.validCandidates = step.candidates; // keep all on error
-    }
-
-    emit('validation:step', { step: step.step, valid: step.validCandidates?.length || 0, total: step.candidates.length });
-  }));
-
-  emit('validation:done', {});
-}
-
-// ═══════════════════════════════════════════════════════════════
 // Fetch ALL step images in parallel
 // ═══════════════════════════════════════════════════════════════
-async function fetchAllImages(steps, imgDir, emit = () => {}) {
+async function fetchAllImages(steps, imgDir, tutorialTitle, emit = () => {}) {
   emit('research:screenshots:start', { total: steps.length });
 
   const results = await Promise.all(
-    steps.map(step => fetchStepImages(step, imgDir, emit))
+    steps.map(step => fetchStepImages(step, imgDir, tutorialTitle, emit))
   );
 
   const count = results.filter(Boolean).length;
   emit('research:screenshots:done', { count });
-
-  // Final Claude pass to discard out-of-context images
-  await validateCandidates(steps, imgDir, emit);
-
   return count;
 }
 
@@ -296,7 +353,7 @@ async function fetchAllImages(steps, imgDir, emit = () => {}) {
 // ═══════════════════════════════════════════════════════════════
 async function generateTTS(text, outputPath) {
   const result = await fal.subscribe('xai/tts/v1', {
-    input: { text: text.replace(/<[^>]+>/g, ''), voice: 'rex', language: 'en' },
+    input: { text: text.replace(/<[^>]+>/g, ''), voice: 'eve', language: 'en' },
   });
   const audioUrl = result.data?.audio?.url;
   if (!audioUrl) throw new Error('No audio from TTS');
@@ -375,7 +432,7 @@ async function runResearch(topic, emit = () => {}) {
   });
 
   // 2. Fetch all images in parallel — Claude validates each one
-  const imgCount = await fetchAllImages(tutorial.steps, imgDir, emit);
+  const imgCount = await fetchAllImages(tutorial.steps, imgDir, tutorial.title, emit);
 
   tutorial.source = 'Serper + Claude Vision';
   const phase1Time = Date.now() - t0;

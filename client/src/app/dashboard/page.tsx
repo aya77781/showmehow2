@@ -26,7 +26,7 @@ interface Project {
   error?: string; createdAt: string;
 }
 
-type Phase = "idle" | "researching" | "ready" | "generating_videos" | "complete" | "error";
+type Phase = "idle" | "researching" | "generating_videos" | "complete" | "error";
 
 interface LogEntry { text: string; status: "done" | "active"; ts: string }
 
@@ -81,6 +81,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [finalVideo, setFinalVideo] = useState<string | null>(null);
+  const [viewTab, setViewTab] = useState<"video" | "steps">("video");
 
   const socketRef = useRef<Socket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -136,27 +137,13 @@ export default function Dashboard() {
     socket.on("screenshot:search", ({ step, query }) => {
       setScreenshotProgress(p => ({ ...p, [step]: "searching..." }));
     });
-    socket.on("screenshot:done", ({ step, picked, total, candidates }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: `picked ${picked}/${total}` }));
-      // Update step candidates in editSteps
+    socket.on("screenshot:done", ({ step, picked, total, valid, candidates }) => {
+      setScreenshotProgress(p => ({ ...p, [step]: `✓ ${valid}/${total} valid` }));
       setEditSteps(prev => prev.map(s => s.step === step ? { ...s, candidates, picked: picked - 1 } : s));
       setSteps(prev => prev.map(s => s.step === step ? { ...s, candidates, picked: picked - 1 } : s));
     });
     socket.on("screenshot:error", ({ step }) => {
       setScreenshotProgress(p => ({ ...p, [step]: "error" }));
-    });
-
-    // Validation events
-    socket.on("validation:start", ({ total }) => {
-      finishLastLog();
-      addLog(`Claude validating ${total} steps for out-of-context images...`, "active");
-    });
-    socket.on("validation:step", ({ step, valid, total }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: `${valid}/${total} valid` }));
-    });
-    socket.on("validation:done", () => {
-      finishLastLog();
-      addLog("Image validation complete");
     });
 
     socket.on("research:screenshots:done", ({ count, time }) => {
@@ -168,13 +155,14 @@ export default function Dashboard() {
       addLog(`Research complete — ${fmtMs(s?.phase1Time)}`);
     });
 
-    // tutorial:ready comes from the socket handler after saving
-    socket.on("tutorial:ready", ({ tutorial, stats: s }) => {
+    // tutorial:ready — research done, auto-generating videos now
+    socket.on("tutorial:ready", ({ sessionId: sid, tutorial, stats: s }) => {
+      if (sid) setSessionId(sid);
       setSteps(tutorial.steps || []);
       setEditSteps(JSON.parse(JSON.stringify(tutorial.steps || [])));
-      setPhase("ready");
+      setPhase("generating_videos");
       setStats(s);
-      addLog("Draft ready — review & edit steps below");
+      addLog("Research complete — generating videos automatically...");
     });
 
     // ── PHASE 2: Video generation events ──
@@ -230,9 +218,12 @@ export default function Dashboard() {
       addLog(`All videos complete (${fmtMs(time)})`);
     });
 
-    socket.on("tutorial:complete", ({ tutorial, stats: s }) => {
+    socket.on("tutorial:complete", ({ sessionId: sid, tutorial, stats: s, finalVideo: fv }) => {
+      if (sid) setSessionId(sid);
+      if (fv) setFinalVideo(fv);
       setSteps(tutorial.steps || []);
       setStats(s);
+      setViewTab("video");
       setPhase("complete");
       setActiveStep(0);
       addLog(`Tutorial finished! Total: ${fmtMs(s?.totalTime)}`);
@@ -263,31 +254,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleGenerateVideos = () => {
-    if (!current) return;
-    setPhase("generating_videos");
-    setVideoProgress({}); setFinalVideo(null);
-    // Save edited steps first
-    api.put(`/api/tutorials/${current._id}/steps`, { steps: editSteps }).catch(() => {});
-    socketRef.current?.emit("tutorial:generate-videos", { projectId: current._id, steps: editSteps });
-  };
-
-  const handleStepEdit = (i: number, field: "title" | "description", val: string) =>
-    setEditSteps(prev => { const c = [...prev]; c[i] = { ...c[i], [field]: val }; return c; });
-
-  const handlePickCandidate = async (stepIndex: number, candidateFile: string) => {
-    if (!current || !sessionId) return;
-    try {
-      await api.put(`/api/tutorials/${current._id}/pick-image`, { stepIndex, candidateFile });
-      // Update local state
-      const stepNum = String(editSteps[stepIndex].step).padStart(2, '0');
-      const mainFile = `step-${stepNum}.png`;
-      const newPicked = editSteps[stepIndex].candidates?.indexOf(candidateFile) ?? 0;
-      setEditSteps(prev => prev.map((s, i) => i === stepIndex ? { ...s, screenshot: mainFile, picked: newPicked } : s));
-      setSteps(prev => prev.map((s, i) => i === stepIndex ? { ...s, screenshot: mainFile, picked: newPicked } : s));
-    } catch {}
-  };
-
   const handleViewProject = async (project: Project) => {
     reset();
     setCurrent(project); setTopic(project.topic);
@@ -298,8 +264,10 @@ export default function Dashboard() {
         setEditSteps(JSON.parse(JSON.stringify(data.tutorial?.steps || [])));
         setSessionId(data.sessionId || "");
         setStats(data.stats || null);
-        setPhase(data.status === "complete" ? "complete" : "ready");
-        if (data.status === "complete") setActiveStep(0);
+        setFinalVideo(data.status === "complete" ? "final-video.mp4" : null);
+        setViewTab("video");
+        setPhase("complete");
+        setActiveStep(0);
       } catch { setError("Failed to load project"); }
     } else if (project.status === "error") {
       setError(project.error || "Generation failed");
@@ -322,7 +290,7 @@ export default function Dashboard() {
 
   const reset = () => {
     setSteps([]); setEditSteps([]); setLog([]); setScreenshotProgress({});
-    setVideoProgress({}); setError(""); setStats(null); setActiveStep(0); setFinalVideo(null);
+    setVideoProgress({}); setError(""); setStats(null); setActiveStep(0); setFinalVideo(null); setViewTab("video");
   };
 
   const handleLogout = () => { localStorage.clear(); router.push("/"); };
@@ -521,105 +489,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* ── READY: Edit steps ─────────────────────────── */}
-          {phase === "ready" && (
-            <div className="max-w-3xl mx-auto">
-              <div className="flex items-start justify-between mb-5 gap-4">
-                <div>
-                  <p className="text-indigo-400 text-xs font-medium mb-1 uppercase tracking-wider">Step 2 of 3 — Review</p>
-                  <h2 className="text-xl font-bold">Edit your tutorial steps</h2>
-                  <p className="text-slate-500 text-sm mt-1">Tweak titles and narration before generating the final video.</p>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={handleNew} className="px-3 py-2 text-sm border border-white/10 rounded-lg hover:bg-white/5 transition text-slate-500">Discard</button>
-                  <button onClick={handleGenerateVideos} className="px-4 py-2 bg-indigo-500 text-white font-semibold text-sm rounded-lg hover:bg-indigo-400 transition flex items-center gap-1.5">
-                    Generate Videos
-                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Topic bar */}
-              <div className="px-4 py-2.5 bg-white/[0.02] border border-white/5 rounded-lg mb-4 flex items-center gap-3 text-sm">
-                <span className="text-slate-600">Topic:</span>
-                <span className="text-white font-medium truncate">{topic}</span>
-                <span className="ml-auto text-slate-600 text-xs shrink-0">{editSteps.length} steps</span>
-              </div>
-
-              {/* Steps */}
-              <div className="space-y-1.5">
-                {editSteps.map((s, i) => (
-                  <div key={s.step} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:border-white/10 transition group">
-                    <div className="flex gap-3">
-                      <div className="flex flex-col items-center pt-0.5">
-                        <div className="w-6 h-6 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold text-[10px]">{s.step}</div>
-                        {i < editSteps.length - 1 && <div className="w-px flex-1 bg-white/5 mt-1" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <input value={s.title} onChange={e => handleStepEdit(i, "title", e.target.value)}
-                          className="w-full bg-transparent text-white font-medium text-sm focus:outline-none border-b border-transparent focus:border-indigo-500/30 pb-1" />
-                        <textarea value={s.description} onChange={e => handleStepEdit(i, "description", e.target.value)} rows={2}
-                          className="w-full bg-transparent text-slate-400 text-sm mt-1.5 focus:outline-none focus:text-slate-300 resize-none leading-relaxed" />
-                      </div>
-                      {(s.imageUrl || (sessionId && s.screenshot)) && (
-                        <img src={s.imageUrl || `${API}/output/sessions/${sessionId}/images/${s.screenshot}`} alt=""
-                          className="w-24 h-16 object-cover rounded-lg shrink-0 border border-white/5" />
-                      )}
-                    </div>
-                    {/* Candidate thumbnails */}
-                    {sessionId && s.candidates && s.candidates.length > 1 && (
-                      <div className="mt-3 ml-9">
-                        <p className="text-[10px] text-slate-600 mb-1.5">Choose best image ({s.validCandidates ? `${s.validCandidates.length} valid` : s.candidates.length} candidates):</p>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {s.candidates.map((c, ci) => {
-                            const isValid = !s.validCandidates || s.validCandidates.includes(c);
-                            const isPicked = ci === s.picked;
-                            return (
-                              <button
-                                key={c}
-                                onClick={() => handlePickCandidate(i, c)}
-                                className={`relative w-20 h-14 rounded-lg overflow-hidden border-2 transition ${
-                                  isPicked ? "border-indigo-500 ring-1 ring-indigo-500/30" :
-                                  isValid ? "border-white/10 hover:border-white/30" :
-                                  "border-red-500/20 opacity-40"
-                                }`}
-                                title={isValid ? `Candidate ${ci + 1}${isPicked ? " (selected)" : ""}` : `Candidate ${ci + 1} (out of context)`}
-                              >
-                                <img
-                                  src={`${API}/output/sessions/${sessionId}/images/${c}`}
-                                  alt={`Candidate ${ci + 1}`}
-                                  className="w-full h-full object-cover"
-                                />
-                                {isPicked && (
-                                  <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
-                                    <span className="text-indigo-400 text-xs font-bold drop-shadow">&#10003;</span>
-                                  </div>
-                                )}
-                                {!isValid && (
-                                  <div className="absolute inset-0 bg-red-900/30 flex items-center justify-center">
-                                    <span className="text-red-400 text-[10px] font-bold">&#10005;</span>
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5 flex justify-between items-center">
-                <p className="text-slate-600 text-xs">You can edit text — screenshots will be used as-is in the video</p>
-                <button onClick={handleGenerateVideos}
-                  className="px-5 py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition flex items-center gap-2 text-sm">
-                  Generate {editSteps.length} Videos
-                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
-                </button>
-              </div>
-            </div>
-          )}
+          {/* "ready" phase removed — videos auto-generate after research */}
 
           {/* ── COMPLETE: View Tutorial ───────────────────── */}
           {phase === "complete" && steps.length > 0 && (
@@ -634,80 +504,233 @@ export default function Dashboard() {
                     {current?.tutorial?.source ? ` — ${current.tutorial.source}` : ""}
                   </p>
                 </div>
-                <button onClick={handleNew} className="px-3 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-400 transition flex items-center gap-1.5 shrink-0">
-                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
-                  New
+                <div className="flex gap-2 shrink-0">
+                  {/* Download */}
+                  {finalVideo && sessionId && (
+                    <a
+                      href={`${API}/output/sessions/${sessionId}/${finalVideo}`}
+                      download={`${(current?.tutorial?.title || topic).replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-")}.mp4`}
+                      className="px-3 py-2 text-sm font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      Download
+                    </a>
+                  )}
+                  {/* Copy link */}
+                  {finalVideo && sessionId && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${API}/output/sessions/${sessionId}/${finalVideo}`);
+                        addLog("Video link copied to clipboard");
+                      }}
+                      className="px-3 py-2 text-sm font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
+                      title="Copy video link"
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      Share
+                    </button>
+                  )}
+                  {/* New */}
+                  <button onClick={handleNew} className="px-3 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-400 transition flex items-center gap-1.5">
+                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
+                    New
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex items-center gap-1 mb-5 border-b border-white/5 pb-px">
+                <button
+                  onClick={() => setViewTab("video")}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition flex items-center gap-2 ${
+                    viewTab === "video"
+                      ? "text-white bg-white/[0.05] border border-white/10 border-b-transparent -mb-px"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  Full Video
+                </button>
+                <button
+                  onClick={() => setViewTab("steps")}
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition flex items-center gap-2 ${
+                    viewTab === "steps"
+                      ? "text-white bg-white/[0.05] border border-white/10 border-b-transparent -mb-px"
+                      : "text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                  Step by Step
+                  <span className="text-[10px] text-slate-600 ml-0.5">{steps.length}</span>
                 </button>
               </div>
 
-              {/* Final concatenated video */}
-              {finalVideo && sessionId && (
-                <div className="mb-6">
-                  <div className="rounded-2xl overflow-hidden border border-white/10 bg-black">
-                    <video
-                      key={`final-${sessionId}`}
-                      src={`${API}/output/sessions/${sessionId}/${finalVideo}`}
-                      controls autoPlay
-                      className="w-full aspect-video"
-                    />
-                  </div>
-                  <p className="text-slate-600 text-xs mt-2 text-center">Full tutorial video — all steps combined</p>
-                </div>
-              )}
-
-              {/* Step-by-step view */}
-              <div className="flex gap-5">
-                {/* Player */}
-                <div className="flex-1 min-w-0">
-                  {steps[activeStep]?.video && sessionId ? (
-                    <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
-                      <video
-                        key={`${sessionId}-${steps[activeStep].video}`}
-                        src={`${API}/output/sessions/${sessionId}/videos/${steps[activeStep].video}`}
-                        controls autoPlay
-                        className="w-full aspect-video"
-                      />
-                    </div>
-                  ) : steps[activeStep]?.screenshot && sessionId ? (
-                    <div className="rounded-xl overflow-hidden border border-white/10">
-                      <img
-                        src={`${API}/output/sessions/${sessionId}/images/${steps[activeStep].screenshot}`}
-                        alt="" className="w-full"
-                      />
+              {/* ── TAB: Full Video ──────────────────────────── */}
+              {viewTab === "video" && (
+                <>
+                  {finalVideo && sessionId ? (
+                    <div>
+                      <div className="rounded-2xl overflow-hidden border border-white/10 bg-black">
+                        <video
+                          key={`final-${sessionId}`}
+                          src={`${API}/output/sessions/${sessionId}/${finalVideo}`}
+                          controls autoPlay
+                          className="w-full aspect-video"
+                        />
+                      </div>
+                      <div className="mt-3 flex items-center justify-between px-1">
+                        <p className="text-slate-600 text-xs">Full tutorial — all {steps.length} steps combined</p>
+                        <div className="flex gap-3">
+                          <a
+                            href={`${API}/output/sessions/${sessionId}/${finalVideo}`}
+                            download={`${(current?.tutorial?.title || topic).replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-")}.mp4`}
+                            className="text-[11px] text-slate-500 hover:text-indigo-400 transition flex items-center gap-1"
+                          >
+                            <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download .mp4
+                          </a>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(`${API}/output/sessions/${sessionId}/${finalVideo}`); }}
+                            className="text-[11px] text-slate-500 hover:text-indigo-400 transition flex items-center gap-1"
+                          >
+                            <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            Copy link
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="rounded-xl border border-white/10 bg-white/[0.02] aspect-video flex items-center justify-center">
-                      <p className="text-slate-600 text-sm">No media for this step</p>
+                      <p className="text-slate-600 text-sm">No video available — check step-by-step view</p>
                     </div>
                   )}
-                  <div className="mt-3">
-                    <h3 className="text-base font-bold"><span className="text-indigo-400 mr-1.5">Step {steps[activeStep]?.step}.</span>{steps[activeStep]?.title}</h3>
-                    <p className="text-slate-400 text-sm mt-1 leading-relaxed">{steps[activeStep]?.description}</p>
-                  </div>
-                </div>
+                </>
+              )}
 
-                {/* Steps nav */}
-                <div className="w-56 shrink-0 hidden md:block">
-                  <p className="text-[10px] text-slate-600 font-medium uppercase tracking-widest mb-2 px-1">Steps</p>
-                  <div className="space-y-0.5">
-                    {steps.map((s, i) => (
-                      <button key={s.step} onClick={() => setActiveStep(i)}
-                        className={`w-full text-left px-3 py-2 rounded-lg transition flex items-start gap-2.5 ${
-                          i === activeStep ? "bg-white/[0.05]" : "hover:bg-white/[0.02]"
-                        }`}>
-                        <span className={`text-[10px] font-bold mt-0.5 ${i === activeStep ? "text-indigo-400" : "text-slate-600"}`}>{s.step}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-xs truncate ${i === activeStep ? "text-white" : "text-slate-500"}`}>{s.title}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            {s.video && <span className="text-[9px] text-green-500/60">video</span>}
-                            {s.screenshot && <span className="text-[9px] text-cyan-500/60">screenshot</span>}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+              {/* ── TAB: Step by Step ────────────────────────── */}
+              {viewTab === "steps" && (
+                <div className="flex gap-5">
+                  {/* Player */}
+                  <div className="flex-1 min-w-0">
+                    {steps[activeStep]?.video && sessionId ? (
+                      <div className="rounded-xl overflow-hidden border border-white/10 bg-black">
+                        <video
+                          key={`${sessionId}-${steps[activeStep].video}`}
+                          src={`${API}/output/sessions/${sessionId}/videos/${steps[activeStep].video}`}
+                          controls autoPlay
+                          className="w-full aspect-video"
+                        />
+                      </div>
+                    ) : steps[activeStep]?.screenshot && sessionId ? (
+                      <div className="rounded-xl overflow-hidden border border-white/10">
+                        <img
+                          src={`${API}/output/sessions/${sessionId}/images/${steps[activeStep].screenshot}`}
+                          alt="" className="w-full"
+                        />
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-white/[0.02] aspect-video flex items-center justify-center">
+                        <p className="text-slate-600 text-sm">No media for this step</p>
+                      </div>
+                    )}
+                    <div className="mt-3">
+                      <h3 className="text-base font-bold"><span className="text-indigo-400 mr-1.5">Step {steps[activeStep]?.step}.</span>{steps[activeStep]?.title}</h3>
+                      <p className="text-slate-400 text-sm mt-1 leading-relaxed">{steps[activeStep]?.description}</p>
+                    </div>
+                  </div>
+
+                  {/* Steps nav */}
+                  <div className="w-72 shrink-0 hidden md:block">
+                    <div className="flex items-center justify-between mb-3 px-1">
+                      <p className="text-[10px] text-slate-600 font-medium uppercase tracking-widest">Steps</p>
+                      <span className="text-[10px] text-slate-700">{activeStep + 1} / {steps.length}</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-1 bg-white/5 rounded-full overflow-hidden mb-3 mx-1">
+                      <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${((activeStep + 1) / steps.length) * 100}%` }} />
+                    </div>
+
+                    <div className="space-y-1 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+                      {steps.map((s, i) => {
+                        const isActive = i === activeStep;
+                        const isPast = i < activeStep;
+                        return (
+                          <button key={s.step} onClick={() => setActiveStep(i)}
+                            className={`w-full text-left rounded-xl transition group ${
+                              isActive
+                                ? "bg-white/[0.06] border border-indigo-500/30 shadow-sm shadow-indigo-500/5"
+                                : "bg-transparent border border-transparent hover:bg-white/[0.03] hover:border-white/5"
+                            } p-2.5`}>
+                            <div className="flex gap-2.5">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold transition ${
+                                isActive ? "bg-indigo-500 text-white" :
+                                isPast ? "bg-green-500/10 text-green-400 border border-green-500/20" :
+                                "bg-white/5 text-slate-600"
+                              }`}>
+                                {isPast && !isActive ? (
+                                  <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+                                ) : s.step}
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <p className={`text-[13px] font-medium leading-tight truncate ${
+                                  isActive ? "text-white" : isPast ? "text-slate-400" : "text-slate-500"
+                                }`}>{s.title}</p>
+                                <p className={`text-[11px] mt-0.5 line-clamp-2 leading-snug ${
+                                  isActive ? "text-slate-400" : "text-slate-700"
+                                }`}>{s.description}</p>
+
+                                <div className="flex items-center gap-1.5 mt-1.5">
+                                  {s.video && (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 text-[9px] font-medium">
+                                      <svg width="8" height="8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                      video
+                                    </span>
+                                  )}
+                                  {s.screenshot && (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 text-[9px] font-medium">
+                                      <svg width="8" height="8" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+                                      img
+                                    </span>
+                                  )}
+                                  {s.videoSize && (
+                                    <span className="text-[9px] text-slate-700">{(s.videoSize / 1024 / 1024).toFixed(1)}MB</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {sessionId && s.screenshot && (
+                                <img
+                                  src={`${API}/output/sessions/${sessionId}/images/${s.screenshot}`}
+                                  alt=""
+                                  className={`w-14 h-10 object-cover rounded-md shrink-0 border transition ${
+                                    isActive ? "border-indigo-500/30" : "border-white/5 opacity-60 group-hover:opacity-80"
+                                  }`}
+                                />
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Prev/Next buttons */}
+                    <div className="flex gap-2 mt-3 px-1">
+                      <button
+                        onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+                        disabled={activeStep === 0}
+                        className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition disabled:opacity-20 disabled:cursor-not-allowed"
+                      >Prev</button>
+                      <button
+                        onClick={() => setActiveStep(Math.min(steps.length - 1, activeStep + 1))}
+                        disabled={activeStep === steps.length - 1}
+                        className="flex-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 transition disabled:opacity-20 disabled:cursor-not-allowed"
+                      >Next</button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Log */}
               {log.length > 0 && (

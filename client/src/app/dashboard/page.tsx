@@ -13,6 +13,7 @@ interface User { name: string; email: string; picture?: string | null }
 interface Step {
   step: number; title: string; description: string;
   screenshot?: string; imageUrl?: string; video?: string; videoSize?: number;
+  candidates?: string[]; validCandidates?: string[]; picked?: number;
 }
 
 interface Tutorial {
@@ -128,33 +129,34 @@ export default function Dashboard() {
       setSteps(s);
     });
     socket.on("research:screenshots:start", ({ total }) => {
-      addLog(`Capturing ${total} screenshots with Playwright...`, "active");
+      addLog(`Searching images for ${total} steps...`, "active");
     });
 
-    // Per-step screenshot events
-    socket.on("screenshot:step", ({ step, title }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: "capturing" }));
+    // Per-step screenshot events (Serper + Claude Vision)
+    socket.on("screenshot:search", ({ step, query }) => {
+      setScreenshotProgress(p => ({ ...p, [step]: "searching..." }));
     });
-    socket.on("screenshot:html", ({ step }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: "analyzing" }));
-    });
-    socket.on("screenshot:actions", ({ step, count }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: `executing ${count} actions` }));
-    });
-    socket.on("screenshot:done", ({ step }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: "done" }));
-    });
-    socket.on("screenshot:fallback-search", ({ step }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: "searching image..." }));
-    });
-    socket.on("screenshot:login-detected", ({ step }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: "login wall — using fallback" }));
+    socket.on("screenshot:done", ({ step, picked, total, candidates }) => {
+      setScreenshotProgress(p => ({ ...p, [step]: `picked ${picked}/${total}` }));
+      // Update step candidates in editSteps
+      setEditSteps(prev => prev.map(s => s.step === step ? { ...s, candidates, picked: picked - 1 } : s));
+      setSteps(prev => prev.map(s => s.step === step ? { ...s, candidates, picked: picked - 1 } : s));
     });
     socket.on("screenshot:error", ({ step }) => {
       setScreenshotProgress(p => ({ ...p, [step]: "error" }));
     });
-    socket.on("step:action", ({ step, action, selector }) => {
-      setScreenshotProgress(p => ({ ...p, [step]: `${action}: ${selector?.slice(0, 30)}` }));
+
+    // Validation events
+    socket.on("validation:start", ({ total }) => {
+      finishLastLog();
+      addLog(`Claude validating ${total} steps for out-of-context images...`, "active");
+    });
+    socket.on("validation:step", ({ step, valid, total }) => {
+      setScreenshotProgress(p => ({ ...p, [step]: `${valid}/${total} valid` }));
+    });
+    socket.on("validation:done", () => {
+      finishLastLog();
+      addLog("Image validation complete");
     });
 
     socket.on("research:screenshots:done", ({ count, time }) => {
@@ -272,6 +274,19 @@ export default function Dashboard() {
 
   const handleStepEdit = (i: number, field: "title" | "description", val: string) =>
     setEditSteps(prev => { const c = [...prev]; c[i] = { ...c[i], [field]: val }; return c; });
+
+  const handlePickCandidate = async (stepIndex: number, candidateFile: string) => {
+    if (!current || !sessionId) return;
+    try {
+      await api.put(`/api/tutorials/${current._id}/pick-image`, { stepIndex, candidateFile });
+      // Update local state
+      const stepNum = String(editSteps[stepIndex].step).padStart(2, '0');
+      const mainFile = `step-${stepNum}.png`;
+      const newPicked = editSteps[stepIndex].candidates?.indexOf(candidateFile) ?? 0;
+      setEditSteps(prev => prev.map((s, i) => i === stepIndex ? { ...s, screenshot: mainFile, picked: newPicked } : s));
+      setSteps(prev => prev.map((s, i) => i === stepIndex ? { ...s, screenshot: mainFile, picked: newPicked } : s));
+    } catch {}
+  };
 
   const handleViewProject = async (project: Project) => {
     reset();
@@ -419,7 +434,7 @@ export default function Dashboard() {
                 <div className="mt-12 grid grid-cols-3 gap-4">
                   {[
                     { icon: "🔍", title: "AI Research", desc: "Claude searches the web and writes a structured script" },
-                    { icon: "📸", title: "Screenshots", desc: "Playwright opens real UIs and captures each step" },
+                    { icon: "📸", title: "Screenshots", desc: "AI finds and validates real screenshots for each step" },
                     { icon: "🎬", title: "Video", desc: "Your AI avatar narrates the tutorial on video" },
                   ].map((s, i) => (
                     <div key={i} className="bg-white/[0.02] border border-white/5 rounded-xl p-5 text-center">
@@ -443,7 +458,7 @@ export default function Dashboard() {
                 </h2>
                 <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
                   {phase === "researching"
-                    ? "Claude is writing a script, then Playwright will capture real screenshots..."
+                    ? "Claude is writing a script, then searching and validating screenshots..."
                     : "Creating avatar clips, compositing, and building your final video..."}
                 </p>
                 <p className="text-indigo-400 text-sm font-medium mt-2 truncate max-w-lg mx-auto">&ldquo;{topic}&rdquo;</p>
@@ -551,6 +566,46 @@ export default function Dashboard() {
                           className="w-24 h-16 object-cover rounded-lg shrink-0 border border-white/5" />
                       )}
                     </div>
+                    {/* Candidate thumbnails */}
+                    {sessionId && s.candidates && s.candidates.length > 1 && (
+                      <div className="mt-3 ml-9">
+                        <p className="text-[10px] text-slate-600 mb-1.5">Choose best image ({s.validCandidates ? `${s.validCandidates.length} valid` : s.candidates.length} candidates):</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {s.candidates.map((c, ci) => {
+                            const isValid = !s.validCandidates || s.validCandidates.includes(c);
+                            const isPicked = ci === s.picked;
+                            return (
+                              <button
+                                key={c}
+                                onClick={() => handlePickCandidate(i, c)}
+                                className={`relative w-20 h-14 rounded-lg overflow-hidden border-2 transition ${
+                                  isPicked ? "border-indigo-500 ring-1 ring-indigo-500/30" :
+                                  isValid ? "border-white/10 hover:border-white/30" :
+                                  "border-red-500/20 opacity-40"
+                                }`}
+                                title={isValid ? `Candidate ${ci + 1}${isPicked ? " (selected)" : ""}` : `Candidate ${ci + 1} (out of context)`}
+                              >
+                                <img
+                                  src={`${API}/output/sessions/${sessionId}/images/${c}`}
+                                  alt={`Candidate ${ci + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                {isPicked && (
+                                  <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
+                                    <span className="text-indigo-400 text-xs font-bold drop-shadow">&#10003;</span>
+                                  </div>
+                                )}
+                                {!isValid && (
+                                  <div className="absolute inset-0 bg-red-900/30 flex items-center justify-center">
+                                    <span className="text-red-400 text-[10px] font-bold">&#10005;</span>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

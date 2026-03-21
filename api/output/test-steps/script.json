@@ -1,0 +1,80 @@
+{
+  "title": "How to Create a GitHub Repository",
+  "url": "https://github.com",
+  "intro": "Create your first GitHub repo in minutes.",
+  "outro": "Your repo is live and ready!",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Go to GitHub.com",
+      "description": "Open your browser and navigate to GitHub.com.",
+      "imageQuery": "GitHub homepage hero landing page screenshot interface"
+    },
+    {
+      "step": 2,
+      "title": "Sign In to Account",
+      "description": "Click Sign In and enter your credentials.",
+      "imageQuery": "GitHub login page sign in form username password screenshot"
+    },
+    {
+      "step": 3,
+      "title": "Open the Dashboard",
+      "description": "You land on your personal GitHub dashboard.",
+      "imageQuery": "GitHub user dashboard home feed repositories panel screenshot"
+    },
+    {
+      "step": 4,
+      "title": "Click New Repository",
+      "description": "Hit the green New button on the sidebar.",
+      "imageQuery": "GitHub dashboard sidebar green New repository button screenshot"
+    },
+    {
+      "step": 5,
+      "title": "Select an Owner",
+      "description": "Use the Owner dropdown to pick your account.",
+      "imageQuery": "GitHub new repository page owner dropdown menu screenshot"
+    },
+    {
+      "step": 6,
+      "title": "Enter Repository Name",
+      "description": "Type a short, memorable name for your repo.",
+      "imageQuery": "GitHub new repository page repository name input field screenshot"
+    },
+    {
+      "step": 7,
+      "title": "Add a Description",
+      "description": "Optionally describe what your project is about.",
+      "imageQuery": "GitHub new repository page description text field screenshot"
+    },
+    {
+      "step": 8,
+      "title": "Set Visibility",
+      "description": "Choose Public or Private for your repository.",
+      "imageQuery": "GitHub new repository page public private visibility radio buttons screenshot"
+    },
+    {
+      "step": 9,
+      "title": "Add a README File",
+      "description": "Check the box to initialize with a README.",
+      "imageQuery": "GitHub new repository page add README initialize checkbox screenshot"
+    },
+    {
+      "step": 10,
+      "title": "Choose a License",
+      "description": "Select a software license from the dropdown.",
+      "imageQuery": "GitHub new repository page choose license dropdown menu screenshot"
+    },
+    {
+      "step": 11,
+      "title": "Click Create Repository",
+      "description": "Press the green Create Repository button now.",
+      "imageQuery": "GitHub new repository page create repository green submit button screenshot"
+    },
+    {
+      "step": 12,
+      "title": "View Your Repository",
+      "description": "Your new repo homepage is ready to use!",
+      "imageQuery": "GitHub freshly created repository main code tab overview screenshot"
+    }
+  ]
+}

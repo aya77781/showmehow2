@@ -8,6 +8,9 @@ const stepSchema = new mongoose.Schema({
   imageUrl: String,
   video: String,
   videoSize: Number,
+  candidates: [String],
+  validCandidates: [String],
+  picked: Number,
 }, { _id: false });
 
 const projectSchema = new mongoose.Schema({

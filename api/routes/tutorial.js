@@ -43,6 +43,32 @@ router.put('/:id/steps', auth, async (req, res) => {
   res.json(project);
 });
 
+// PUT /api/tutorials/:id/pick-image — user picks a different candidate image for a step
+router.put('/:id/pick-image', auth, async (req, res) => {
+  const { stepIndex, candidateFile } = req.body;
+  const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+  if (!project.sessionId) return res.status(400).json({ error: 'No session' });
+
+  const step = project.tutorial?.steps?.[stepIndex];
+  if (!step) return res.status(400).json({ error: 'Invalid step index' });
+  if (!step.candidates?.includes(candidateFile)) return res.status(400).json({ error: 'Invalid candidate' });
+
+  const fs = require('fs');
+  const path = require('path');
+  const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', project.sessionId, 'images');
+  const stepNum = String(step.step).padStart(2, '0');
+  const mainFile = `step-${stepNum}.png`;
+
+  // Copy the chosen candidate as the main screenshot
+  fs.copyFileSync(path.join(imgDir, candidateFile), path.join(imgDir, mainFile));
+  step.screenshot = mainFile;
+  step.picked = step.candidates.indexOf(candidateFile);
+  await project.save();
+
+  res.json({ ok: true, step: step.step, screenshot: mainFile, picked: step.picked });
+});
+
 // DELETE /api/tutorials/:id
 router.delete('/:id', auth, async (req, res) => {
   const project = await Project.findOneAndDelete({ _id: req.params.id, user: req.user.id });

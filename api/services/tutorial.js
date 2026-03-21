@@ -1,6 +1,5 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { fal } = require('@fal-ai/client');
-const { chromium } = require('playwright');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -42,7 +41,7 @@ async function uploadToFal(filePath, mimeType) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Claude → tutorial script with real URLs per step
+// Claude → tutorial script (short descriptions for ~2s clips)
 // ═══════════════════════════════════════════════════════════════
 async function generateScript(topic) {
   const response = await client.messages.create({
@@ -51,29 +50,30 @@ async function generateScript(topic) {
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
     messages: [{
       role: 'user',
-      content: `You are a tutorial script writer. Create a step-by-step video tutorial for: "${topic}"
+      content: `You are a tutorial script writer for SHORT video tutorials. Create a step-by-step tutorial for: "${topic}"
 
 RULES:
-- Use web_search to find the EXACT current URLs for each step
-- 5-7 steps maximum — no filler steps
-- Each description must be a complete spoken sentence (15-25 words), not a fragment
-- imageQuery must be highly specific: include site name + exact UI element + "interface" (e.g. "GitHub create repository form green button interface 2024")
-- URLs must be the EXACT page where the action happens, not the homepage
-- Never repeat the same URL twice unless unavoidable
+- Use web_search to find the real website/app for this topic
+- 8-12 steps — each step is ONE micro-action (click one button, fill one field, etc.)
+- Each description must be EXACTLY 5-10 words — short enough for a 2-second voiceover
+- imageQuery must be ULTRA-SPECIFIC: "[SiteName] [exact page name] [exact UI element] screenshot interface"
+  Example: "GitHub new repository page name input field screenshot"
+  Example: "Gmail compose window subject line text field screenshot"
+- Every step MUST have a different imageQuery — never repeat the same query
+- Steps should show DIFFERENT screens/sections of the UI
 
-Return ONLY valid JSON, no markdown, no explanation:
+Return ONLY valid JSON:
 {
   "title": "How to...",
   "url": "https://...",
-  "intro": "Welcome! Today I'll show you exactly how to [topic] in just [N] simple steps.",
-  "outro": "And that's it! You've successfully [completed topic]. Don't forget to like and subscribe.",
+  "intro": "Short welcome, 5-8 words max.",
+  "outro": "Short closing, 5-8 words max.",
   "steps": [
     {
       "step": 1,
-      "title": "Short action verb + object",
-      "description": "Full spoken sentence describing what the viewer sees and does on screen.",
-      "url": "https://exact-page.com/path",
-      "imageQuery": "SiteName specific UI element action interface screenshot"
+      "title": "Verb + Object (3-5 words)",
+      "description": "Short voiceover, 5-10 words exactly.",
+      "imageQuery": "SiteName exact page exact element screenshot interface"
     }
   ]
 }`
@@ -84,235 +84,50 @@ Return ONLY valid JSON, no markdown, no explanation:
   const i = text.indexOf('{'), j = text.lastIndexOf('}');
   if (i === -1) throw new Error('No JSON from Claude');
   const script = JSON.parse(text.slice(i, j + 1));
-  // Strip <cite> tags
-  if (script.steps) {
-    script.steps.forEach(s => {
-      if (s.description) s.description = s.description.replace(/<[^>]+>/g, '').trim();
-    });
-  }
-  if (script.intro) script.intro = script.intro.replace(/<[^>]+>/g, '').trim();
-  if (script.outro) script.outro = script.outro.replace(/<[^>]+>/g, '').trim();
+  const strip = s => s ? s.replace(/<[^>]+>/g, '').trim() : s;
+  if (script.steps) script.steps.forEach(s => { s.description = strip(s.description); });
+  script.intro = strip(script.intro);
+  script.outro = strip(script.outro);
   return script;
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Extract simplified HTML from page (inputs, buttons, links, forms)
-// ═══════════════════════════════════════════════════════════════
-async function extractPageStructure(page) {
-  return await page.evaluate(() => {
-    const elements = [];
-    // Inputs
-    document.querySelectorAll('input, textarea, select').forEach(el => {
-      if (el.offsetParent === null) return; // hidden
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      elements.push({
-        tag: el.tagName.toLowerCase(),
-        type: el.type || '',
-        name: el.name || '',
-        id: el.id || '',
-        placeholder: el.placeholder || '',
-        label: el.labels?.[0]?.textContent?.trim() || '',
-        value: el.value || '',
-        selector: el.id ? `#${el.id}` : el.name ? `[name="${el.name}"]` : null,
-      });
-    });
-    // Buttons and links
-    document.querySelectorAll('button, a[href], [role="button"]').forEach(el => {
-      if (el.offsetParent === null) return;
-      const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-      const text = el.textContent?.trim().slice(0, 60);
-      if (!text) return;
-      elements.push({
-        tag: el.tagName.toLowerCase(),
-        text,
-        href: el.href || '',
-        id: el.id || '',
-        class: el.className?.toString().slice(0, 80) || '',
-        selector: el.id ? `#${el.id}` : null,
-      });
-    });
-    // Checkboxes and radios
-    document.querySelectorAll('input[type="checkbox"], input[type="radio"]').forEach(el => {
-      if (el.offsetParent === null) return;
-      const label = el.labels?.[0]?.textContent?.trim() || el.name || '';
-      elements.push({
-        tag: 'checkbox',
-        name: el.name || '',
-        id: el.id || '',
-        label,
-        checked: el.checked,
-        selector: el.id ? `#${el.id}` : `[name="${el.name}"]`,
-      });
-    });
-    return { title: document.title, url: location.href, elements: elements.slice(0, 50) };
-  });
+function detectMime(buf) {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
+  if (buf[0] === 0xFF && buf[1] === 0xD8) return 'image/jpeg';
+  if (buf[0] === 0x52 && buf[1] === 0x49) return 'image/webp';
+  if (buf[0] === 0x47 && buf[1] === 0x49) return 'image/gif';
+  return 'image/jpeg';
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Claude analyzes real HTML → returns Playwright actions
+// Serper image search → save ALL candidates, Claude picks best
 // ═══════════════════════════════════════════════════════════════
-async function getActionsFromHTML(pageStructure, stepTitle, stepDescription) {
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
-    messages: [{
-      role: 'user',
-      content: `Browser automation task. You MUST only use selectors from the elements list below.
+async function fetchStepImages(step, imgDir, emit) {
+  const stepNum = String(step.step).padStart(2, '0');
+  const query = step.imageQuery || `${step.title} screenshot interface`;
+  emit('screenshot:search', { step: step.step, query });
 
-PAGE: "${pageStructure.title}"
-URL: ${pageStructure.url}
-STEP GOAL: "${stepTitle}" — ${stepDescription}
-
-AVAILABLE ELEMENTS (use ONLY these selectors):
-${JSON.stringify(pageStructure.elements, null, 2)}
-
-DECISION:
-1. If the page already shows what the step describes → return []
-2. If interaction is needed → return 1-3 actions max using ONLY selectors from above
-
-ACTION FORMAT (return JSON array only, no explanation):
-[{"action":"fill","selector":"#id","value":"fake-data"},{"action":"click","selector":"#btn"}]
-
-FAKE DATA RULES:
-- email → "alex.demo@example.com"
-- password → "Demo@Pass123"
-- username → "alexdemo2024"
-- repo/project name → "my-awesome-project"
-- full name → "Alex Demo"
-- phone → "+1 555 0100"
-
-IMPORTANT: If a selector from elements has id, ALWAYS prefer #id over other selectors.
-If no matching selector exists for the action, skip that action entirely.
-Return [] if the page is a landing/info page with nothing to fill.`
-    }]
-  });
-
-  const text = response.content.find(b => b.type === 'text')?.text || '';
-  const i = text.indexOf('['), j = text.lastIndexOf(']');
-  if (i === -1) return [];
-  try {
-    return JSON.parse(text.slice(i, j + 1));
-  } catch {
-    return [];
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Execute Playwright actions from Claude
-// ═══════════════════════════════════════════════════════════════
-async function executeActions(page, actions, emit, stepNum) {
-  for (const act of actions) {
-    try {
-      switch (act.action) {
-        case 'fill':
-          await page.waitForSelector(act.selector, { timeout: 3000 }).catch(() => {});
-          await page.fill(act.selector, act.value || '');
-          await page.waitForTimeout(400);
-          emit('step:action', { step: stepNum, action: 'fill', selector: act.selector });
-          break;
-        case 'click':
-          await page.waitForSelector(act.selector, { timeout: 3000 }).catch(() => {});
-          await page.click(act.selector);
-          await page.waitForTimeout(800);
-          emit('step:action', { step: stepNum, action: 'click', selector: act.selector });
-          break;
-        case 'check':
-          await page.waitForSelector(act.selector, { timeout: 3000 }).catch(() => {});
-          await page.check(act.selector);
-          await page.waitForTimeout(400);
-          emit('step:action', { step: stepNum, action: 'check', selector: act.selector });
-          break;
-        case 'select':
-          await page.selectOption(act.selector, act.value || '');
-          await page.waitForTimeout(400);
-          break;
-        case 'scroll':
-          await page.evaluate((px) => window.scrollBy(0, px), act.pixels || 300);
-          await page.waitForTimeout(400);
-          break;
-        case 'wait':
-          await page.waitForTimeout(act.ms || 1000);
-          break;
-      }
-    } catch (err) {
-      emit('step:action-error', { step: stepNum, action: act.action, selector: act.selector, error: err.message });
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Dismiss cookie banners
-// ═══════════════════════════════════════════════════════════════
-async function dismissCookies(page) {
-  const selectors = [
-    'button[id*="accept"]', 'button[id*="Accept"]',
-    'button[id*="agree"]', 'button[id*="consent"]',
-    'button[id="L2AGLb"]',
-    'button[aria-label="Accept all"]',
-    '#onetrust-accept-btn-handler',
-    '.cc-accept', '.cc-btn.cc-allow',
-  ];
-  for (const sel of selectors) {
-    try {
-      const btn = await page.$(sel);
-      if (btn && await btn.isVisible()) {
-        await btn.click();
-        await page.waitForTimeout(1000);
-        return true;
-      }
-    } catch {}
-  }
-  // Fallback: any button with accept/agree text
-  try {
-    const buttons = await page.$$('button');
-    for (const btn of buttons) {
-      const text = (await btn.textContent() || '').toLowerCase();
-      if (text.includes('accept') || text.includes('agree') || text.includes('got it') || text.includes('i agree')) {
-        if (await btn.isVisible()) { await btn.click(); await page.waitForTimeout(1000); return true; }
-      }
-    }
-  } catch {}
-  return false;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Detect if page is a login/auth wall
-// ═══════════════════════════════════════════════════════════════
-async function isLoginWall(page) {
-  const title = (await page.title()).toLowerCase();
-  const url = page.url().toLowerCase();
-  const loginKeywords = ['sign in', 'log in', 'login', 'signin', 'authenticate', 'sso', 'oauth', 'password'];
-  return loginKeywords.some(k => title.includes(k) || url.includes(k));
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Fallback: search Google Images via Serper, Claude validates best match
-// ═══════════════════════════════════════════════════════════════
-async function searchAndDownloadImage(query, filePath, stepTitle, stepDescription) {
   const res = await fetch('https://google.serper.dev/images', {
     method: 'POST',
     headers: {
       'X-API-KEY': process.env.SERPER_API_KEY,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ q: query + ' screenshot UI', gl: 'us', hl: 'en', num: 10 }),
+    body: JSON.stringify({ q: query, gl: 'us', hl: 'en', num: 10 }),
   });
 
   if (!res.ok) return false;
   const data = await res.json();
-  const images = (data.images || []).slice(0, 8);
+  const images = (data.images || []).slice(0, 10);
 
-  // Download ALL successful images in parallel
+  // Download ALL in parallel
   const downloads = await Promise.allSettled(
     images.map(img =>
       fetch(img.imageUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
         redirect: 'follow',
         signal: AbortSignal.timeout(4000),
-      })
-      .then(async r => {
+      }).then(async r => {
         if (!r.ok) throw new Error('not ok');
         const buf = Buffer.from(await r.arrayBuffer());
         if (buf.length < 5000) throw new Error('too small');
@@ -324,216 +139,168 @@ async function searchAndDownloadImage(query, filePath, stepTitle, stepDescriptio
   const candidates = downloads
     .filter(d => d.status === 'fulfilled')
     .map(d => d.value)
-    .slice(0, 5); // max 5 for Claude to evaluate
+    .filter(buf => {
+      const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8;
+      const isPng = buf[0] === 0x89 && buf[1] === 0x50;
+      return isJpeg || isPng;
+    })
+    .slice(0, 6);
 
   if (candidates.length === 0) return false;
-  if (candidates.length === 1) {
-    fs.writeFileSync(filePath, candidates[0]);
-    return true;
-  }
 
-  // Claude Vision picks the best image for this step
+  // Save ALL candidates as step-01-c1.jpg, step-01-c2.jpg, etc.
+  const candidateFiles = [];
+  candidates.forEach((buf, i) => {
+    const ext = buf[0] === 0x89 ? 'png' : 'jpg';
+    const file = `step-${stepNum}-c${i + 1}.${ext}`;
+    fs.writeFileSync(path.join(imgDir, file), buf);
+    candidateFiles.push(file);
+  });
+
+  // Claude Vision picks the BEST image
+  let picked = 0;
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 100,
+      max_tokens: 50,
       messages: [{
         role: 'user',
         content: [
           ...candidates.map(buf => ({
             type: 'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: buf.toString('base64') },
+            source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
           })),
           {
             type: 'text',
-            text: `Tutorial step: "${stepTitle || ''}" — ${stepDescription || ''}
-Search query: "${query}"
+            text: `Tutorial step: "${step.title}" — ${step.description || ''}
 
-You see ${candidates.length} images from Google Image search.
-Pick the ONE image that BEST matches this tutorial step.
+Pick the image that BEST shows this step. It MUST be:
+1. A real screenshot of the correct website/app (not illustration, not icon, not blog)
+2. Showing the EXACT page/screen described (not homepage if step is about settings)
+3. Clear, readable, not cropped or blurry
 
-CRITERIA (in order of importance):
-1. Shows the CORRECT website/app interface (not a different site)
-2. Shows the EXACT screen/page described in the step (not a different page)
-3. Is a real screenshot of the UI (not a blog thumbnail, icon, or illustration)
-4. Is clear and readable (not blurry, cropped, or too small)
-
-If NONE of the images match the step well, reply: 0
-Otherwise reply with ONLY the image number: 1, 2, 3, 4, or 5`,
+Reply ONLY with the number (1-${candidates.length}), or 0 if none match.`,
           },
         ],
       }],
     });
 
-    const choice = parseInt(response.content[0].text.trim()) - 1;
-    if (choice >= 0 && choice < candidates.length) {
-      fs.writeFileSync(filePath, candidates[choice]);
-      return true;
-    } else if (choice === -1) {
-      // Claude said 0 = none match, save best available anyway
-      fs.writeFileSync(filePath, candidates[0]);
-      return true;
-    }
+    const numMatch = response.content[0].text.trim().match(/\d+/);
+    const choice = numMatch ? parseInt(numMatch[0]) - 1 : 0;
+    picked = (choice >= 0 && choice < candidates.length) ? choice : 0;
   } catch {}
 
-  fs.writeFileSync(filePath, candidates[0]);
+  // Copy the picked candidate as the main screenshot
+  const mainFile = `step-${stepNum}.png`;
+  fs.copyFileSync(path.join(imgDir, candidateFiles[picked]), path.join(imgDir, mainFile));
+
+  step.screenshot = mainFile;
+  step.candidates = candidateFiles;
+  step.picked = picked;
+
+  emit('screenshot:done', {
+    step: step.step,
+    picked: picked + 1,
+    total: candidates.length,
+    candidates: candidateFiles,
+  });
   return true;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Best shot — 4 screenshots at different moments, Claude validates
+// Final Claude pass — discard out-of-context candidates
 // ═══════════════════════════════════════════════════════════════
-async function captureBestShot(page, filePath, stepTitle, stepDescription) {
-  const candidates = [];
-  for (const delay of [0, 600, 1200, 2000]) {
-    if (delay > 0) await page.waitForTimeout(delay);
-    const buf = await page.screenshot({ type: 'jpeg', quality: 65 });
-    candidates.push(buf);
-  }
+async function validateCandidates(steps, imgDir, emit) {
+  const stepsWithCandidates = steps.filter(s => s.candidates?.length > 0);
+  if (stepsWithCandidates.length === 0) return;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 100,
-    messages: [{
-      role: 'user',
-      content: [
-        ...candidates.map(buf => ({
-          type: 'image',
-          source: { type: 'base64', media_type: 'image/jpeg', data: buf.toString('base64') },
-        })),
-        {
-          type: 'text',
-          text: `Tutorial step: "${stepTitle}" — ${stepDescription}
+  emit('validation:start', { total: stepsWithCandidates.length });
 
-These are 4 screenshots of the SAME page taken at t=0s, t=0.6s, t=1.2s, and t=2s.
+  // Validate each step's candidates in parallel
+  await Promise.all(stepsWithCandidates.map(async (step) => {
+    const stepNum = String(step.step).padStart(2, '0');
+    const bufs = step.candidates.map(f => fs.readFileSync(path.join(imgDir, f)));
 
-PICK the best screenshot. Criteria:
-1. Page is FULLY LOADED (no spinners, no skeleton loaders, no blank areas)
-2. The UI elements described in the step are VISIBLE on screen
-3. Any form fields that were filled have the data visible
-4. No popups, overlays, or cookie banners blocking the content
+    try {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: [
+            ...bufs.map(buf => ({
+              type: 'image',
+              source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
+            })),
+            {
+              type: 'text',
+              text: `Tutorial step: "${step.title}" — ${step.description || ''}
 
-Reply with ONLY the number: 1, 2, 3, or 4`,
-        },
-      ],
-    }],
-  });
+You see ${bufs.length} candidate images. Which ones are RELEVANT to this tutorial step?
+A relevant image must be a real screenshot/UI of the correct website/app showing the described action.
+Discard: illustrations, icons, unrelated pages, blog posts, marketing images.
 
-  const choice = parseInt(response.content[0].text.trim()) - 1;
-  const bestIndex = (choice >= 0 && choice < candidates.length) ? choice : candidates.length - 1;
-  // Save the chosen JPEG (already good quality for video)
-  fs.writeFileSync(filePath, candidates[bestIndex]);
+Reply with ONLY the numbers of RELEVANT images, comma-separated. Example: 1,3,5
+If NONE are relevant, reply: NONE`,
+            },
+          ],
+        }],
+      });
+
+      const text = response.content[0].text.trim();
+      if (text === 'NONE') {
+        step.validCandidates = [];
+      } else {
+        const nums = text.match(/\d+/g)?.map(n => parseInt(n) - 1).filter(n => n >= 0 && n < step.candidates.length) || [];
+        step.validCandidates = nums.map(n => step.candidates[n]);
+        // If picked candidate was discarded, re-pick from valid ones
+        if (step.validCandidates.length > 0 && !step.validCandidates.includes(step.candidates[step.picked])) {
+          const newPicked = step.candidates.indexOf(step.validCandidates[0]);
+          step.picked = newPicked;
+          const mainFile = `step-${stepNum}.png`;
+          fs.copyFileSync(path.join(imgDir, step.validCandidates[0]), path.join(imgDir, mainFile));
+          step.screenshot = mainFile;
+        }
+      }
+    } catch {
+      step.validCandidates = step.candidates; // keep all on error
+    }
+
+    emit('validation:step', { step: step.step, valid: step.validCandidates?.length || 0, total: step.candidates.length });
+  }));
+
+  emit('validation:done', {});
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN: Navigate + extract HTML + Claude actions + best screenshot
-// Fallback: if login wall or error, search for image online
+// Fetch ALL step images in parallel
 // ═══════════════════════════════════════════════════════════════
-async function captureScreenshots(steps, imgDir, emit = () => {}) {
-  const browser = await chromium.launch({ headless: true, args: ['--lang=en-US'] });
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 720 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    locale: 'en-US',
-    timezoneId: 'America/New_York',
-  });
-  const page = await context.newPage();
-  page.on('dialog', d => d.dismiss().catch(() => {}));
+async function fetchAllImages(steps, imgDir, emit = () => {}) {
+  emit('research:screenshots:start', { total: steps.length });
 
-  let count = 0;
-  let lastUrl = '';
+  const results = await Promise.all(
+    steps.map(step => fetchStepImages(step, imgDir, emit))
+  );
 
-  for (const step of steps) {
-    const stepNum = String(step.step).padStart(2, '0');
-    const file = `step-${stepNum}.png`;
-    const filePath = path.join(imgDir, file);
+  const count = results.filter(Boolean).length;
+  emit('research:screenshots:done', { count });
 
-    try {
-      emit('screenshot:step', { step: step.step, title: step.title, url: step.url });
+  // Final Claude pass to discard out-of-context images
+  await validateCandidates(steps, imgDir, emit);
 
-      // Navigate only if URL changed
-      const url = step.url || '';
-      if (url && url !== lastUrl && !url.includes('[')) {
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 12000 })
-          .catch(() => page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 }));
-        lastUrl = page.url();
-        await dismissCookies(page);
-      }
-
-      // Login wall → fallback to image search
-      if (await isLoginWall(page)) {
-        emit('screenshot:login-detected', { step: step.step, url: page.url() });
-
-        // If this step IS about signing in, fill form + screenshot
-        if (step.title.toLowerCase().includes('sign') || step.title.toLowerCase().includes('log in')) {
-          const structure = await extractPageStructure(page);
-          const actions = await getActionsFromHTML(structure, step.title, step.description || '');
-          if (actions.length) await executeActions(page, actions, emit, step.step);
-          await captureBestShot(page, filePath, step.title, step.description || '');
-          step.screenshot = file;
-          count++;
-          emit('screenshot:done', { step: step.step, file });
-        } else {
-          // Not a login step — search for image
-          const query = step.imageQuery || `${step.title} screenshot`;
-          emit('screenshot:fallback-search', { step: step.step, query });
-          const found = await searchAndDownloadImage(query, filePath, step.title, step.description || '');
-          if (found) { step.screenshot = file; count++; }
-          emit('screenshot:done', { step: step.step, file, source: 'image-search' });
-        }
-        continue;
-      }
-
-      // Normal flow: extract HTML → Claude maps actions → execute → best shot
-      const structure = await extractPageStructure(page);
-      emit('screenshot:html', { step: step.step, title: structure.title, elements: structure.elements.length });
-
-      const actions = await getActionsFromHTML(structure, step.title, step.description || '');
-      emit('screenshot:actions', { step: step.step, count: actions.length, actions: actions.map(a => a.action) });
-      if (actions.length) await executeActions(page, actions, emit, step.step);
-
-      // Claude picks the best of 4 screenshots
-      await captureBestShot(page, filePath, step.title, step.description || '');
-      step.screenshot = file;
-      count++;
-      emit('screenshot:done', { step: step.step, file });
-
-    } catch {
-      // Fallback: Serper image search — Claude validates
-      const query = step.imageQuery || `${step.title} screenshot`;
-      const found = await searchAndDownloadImage(query, filePath, step.title, step.description || '');
-      if (found) { step.screenshot = file; count++; }
-      emit('screenshot:fallback', { step: step.step, source: 'image-search' });
-    }
-  }
-
-  await browser.close();
   return count;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// TTS — ElevenLabs (Sarah, female, american)
+// TTS — xAI via fal.ai
 // ═══════════════════════════════════════════════════════════════
-const ELEVENLABS_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL'; // Sarah
-
 async function generateTTS(text, outputPath) {
-  const cleanText = text.replace(/<[^>]+>/g, '').trim();
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
-    method: 'POST',
-    headers: {
-      'xi-api-key': process.env.ELEVENLABS_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      text: cleanText,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
-    }),
+  const result = await fal.subscribe('xai/tts/v1', {
+    input: { text: text.replace(/<[^>]+>/g, ''), voice: 'rex', language: 'en' },
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`ElevenLabs TTS failed (${res.status}): ${err}`);
-  }
+  const audioUrl = result.data?.audio?.url;
+  if (!audioUrl) throw new Error('No audio from TTS');
+  const res = await fetch(audioUrl);
   fs.writeFileSync(outputPath, Buffer.from(await res.arrayBuffer()));
   return outputPath;
 }
@@ -542,7 +309,7 @@ async function generateTTS(text, outputPath) {
 // VEED Fabric 1.0 — avatar + audio → talking head
 // ═══════════════════════════════════════════════════════════════
 async function generateTalkingClip(avatarUrl, audioPath, outputPath, emit, label) {
-  const audioUrl = await uploadToFal(audioPath, 'audio/mpeg');
+  const audioUrl = await uploadToFal(audioPath, 'audio/wav');
   emit('video:clip:progress', { label, status: 'GENERATING' });
 
   const result = await fal.subscribe('veed/fabric-1.0', {
@@ -589,7 +356,7 @@ function concatenateVideos(clipPaths, outputPath) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PHASE 1: Research — Claude script + Playwright screenshots
+// PHASE 1: Research — Claude script + Serper images (parallel)
 // ═══════════════════════════════════════════════════════════════
 async function runResearch(topic, emit = () => {}) {
   const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -600,19 +367,17 @@ async function runResearch(topic, emit = () => {}) {
   const t0 = Date.now();
   emit('research:start', { sessionId, topic });
 
-  // 1. Claude generates script with real URLs via web search
+  // 1. Claude generates script
   emit('research:claude:start', {});
   const tutorial = await generateScript(topic);
   emit('research:claude:done', {
     steps: tutorial.steps, intro: tutorial.intro, outro: tutorial.outro, time: Date.now() - t0,
   });
 
-  // 2. Playwright navigates → extracts HTML → Claude maps actions → executes → screenshots
-  emit('research:screenshots:start', { total: tutorial.steps.length });
-  const imgCount = await captureScreenshots(tutorial.steps, imgDir, emit);
-  emit('research:screenshots:done', { count: imgCount, time: Date.now() - t0 });
+  // 2. Fetch all images in parallel — Claude validates each one
+  const imgCount = await fetchAllImages(tutorial.steps, imgDir, emit);
 
-  tutorial.source = 'Playwright + Claude';
+  tutorial.source = 'Serper + Claude Vision';
   const phase1Time = Date.now() - t0;
   const result = { sessionId, tutorial, stats: { images: imgCount, phase1Time } };
   emit('research:done', result);
@@ -630,8 +395,8 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   fs.mkdirSync(vidDir, { recursive: true });
 
   const t0 = Date.now();
-  const intro = tutorial.intro || `Welcome to this tutorial: ${tutorial.title}`;
-  const outro = tutorial.outro || `That's it! You've completed the tutorial successfully.`;
+  const intro = tutorial.intro || `Welcome to this tutorial.`;
+  const outro = tutorial.outro || `That's it, you're done!`;
 
   // 1. Avatar
   emit('avatar:start', {});
@@ -648,7 +413,7 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   emit('tts:start', { total: narrations.length });
   const ttsResults = await Promise.all(
     narrations.map(n =>
-      generateTTS(n.text, path.join(audioDir, `${n.id}.mp3`))
+      generateTTS(n.text, path.join(audioDir, `${n.id}.wav`))
         .then(f => { emit('tts:done', { id: n.id }); return f; })
         .catch(err => { emit('tts:error', { id: n.id, error: err.message }); return null; })
     )

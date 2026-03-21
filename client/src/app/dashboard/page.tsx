@@ -24,6 +24,7 @@ interface Project {
   _id: string; topic: string; status: string; sessionId?: string;
   tutorial?: Tutorial; stats?: { phase1Time?: number; phase2Time?: number; totalTime?: number };
   error?: string; createdAt: string;
+  isPublic?: boolean; slug?: string; category?: string; tags?: string[];
 }
 
 type Phase = "idle" | "researching" | "generating_videos" | "complete" | "error";
@@ -89,6 +90,14 @@ export default function Dashboard() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
+
+  // Publish controls
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [pubPublic, setPubPublic] = useState(false);
+  const [pubCategory, setPubCategory] = useState("dev");
+  const [pubTags, setPubTags] = useState("");
+  const [pubSaving, setPubSaving] = useState(false);
+  const [pubSlug, setPubSlug] = useState<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -285,6 +294,11 @@ export default function Dashboard() {
         setViewTab("video");
         setPhase("complete");
         setActiveStep(0);
+        // Init publish state from project
+        setPubPublic(!!data.isPublic);
+        setPubCategory(data.category || "dev");
+        setPubTags((data.tags || []).join(", "));
+        setPubSlug(data.slug || null);
       } catch { setError("Failed to load project"); }
     } else if (project.status === "error") {
       setError(project.error || "Generation failed");
@@ -321,6 +335,25 @@ export default function Dashboard() {
     }
   };
 
+  const handlePublish = async () => {
+    if (!current || pubSaving) return;
+    setPubSaving(true);
+    try {
+      const tagsArr = pubTags.split(",").map(t => t.trim()).filter(Boolean);
+      const { data } = await api.put(`/api/explore/${current._id}/visibility`, {
+        isPublic: pubPublic,
+        category: pubCategory,
+        tags: tagsArr,
+      });
+      setPubSlug(data.slug || null);
+      setCurrent(prev => prev ? { ...prev, isPublic: data.isPublic, slug: data.slug, category: data.category } : prev);
+      addLog(pubPublic ? `Published! Slug: ${data.slug}` : "Tutorial set to private");
+      fetchProjects();
+    } catch (err: any) {
+      addLog(`Publish error: ${err.response?.data?.error || err.message}`);
+    } finally { setPubSaving(false); }
+  };
+
   const handleNew = () => {
     reset(); setPhase("idle"); setCurrent(null); setTopic("");
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -329,7 +362,9 @@ export default function Dashboard() {
   const reset = () => {
     setSteps([]); setEditSteps([]); setLog([]); setScreenshotProgress({});
     setVideoProgress({}); setError(""); setStats(null); setActiveStep(0); setFinalVideo(null); setViewTab("video");
+    setSessionId("");
     setChatMessages([]); setChatInput(""); setChatLoading(false); setChatOpen(false);
+    setPublishOpen(false); setPubPublic(false); setPubCategory("dev"); setPubTags(""); setPubSaving(false); setPubSlug(null);
   };
 
   const handleLogout = () => { localStorage.clear(); router.push("/"); };
@@ -361,6 +396,7 @@ export default function Dashboard() {
               <div className="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold text-xs ring-1 ring-white/10">{user.name?.[0]?.toUpperCase()}</div>
             )}
             <span className="text-slate-400 text-sm hidden sm:block">{user.name}</span>
+            <a href="/pricing" className="ml-1 text-xs text-indigo-400 hover:text-indigo-300 transition font-medium">Pricing</a>
             <button onClick={handleLogout} className="ml-1 text-xs text-slate-600 hover:text-slate-400 transition">Log out</button>
           </div>
         </div>
@@ -384,7 +420,10 @@ export default function Dashboard() {
                 >
                   <p className="text-[13px] text-slate-300 truncate pr-4">{p.topic}</p>
                   <div className="flex items-center justify-between mt-1">
-                    <Badge status={p.status} />
+                    <div className="flex items-center gap-2">
+                      <Badge status={p.status} />
+                      {p.isPublic && <span className="text-[9px] text-green-500 bg-green-500/10 px-1.5 py-0.5 rounded font-medium">PUBLIC</span>}
+                    </div>
                     <span className="text-[10px] text-slate-700">{ago(p.createdAt)}</span>
                   </div>
                   <button
@@ -544,6 +583,17 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => setPublishOpen(!publishOpen)}
+                    className={`px-3 py-2 text-sm font-medium rounded-lg transition flex items-center gap-1.5 ${
+                      pubPublic
+                        ? "bg-green-500/10 border border-green-500/30 text-green-400"
+                        : "border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    {pubPublic ? "Public" : "Publish"}
+                  </button>
                   {finalVideo && sessionId && (
                     <a
                       href={`${API}/output/sessions/${sessionId}/${finalVideo}`}
@@ -573,6 +623,88 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
+
+              {/* Publish panel */}
+              {publishOpen && (
+                <div className="mb-5 bg-white/[0.02] border border-white/10 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Publish Settings</h3>
+                    <button onClick={() => setPublishOpen(false)} className="text-slate-600 hover:text-slate-400 transition">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+
+                  {/* Toggle */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <button
+                      onClick={() => setPubPublic(!pubPublic)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${pubPublic ? "bg-green-500" : "bg-white/10"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${pubPublic ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                    <span className="text-sm text-slate-400">{pubPublic ? "Public — visible on Explore" : "Private — only you can see it"}</span>
+                  </div>
+
+                  {pubPublic && (
+                    <div className="space-y-3">
+                      {/* Category */}
+                      <div>
+                        <label className="text-xs text-slate-500 block mb-1">Category</label>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {[
+                            { id: "dev", label: "Development" }, { id: "design", label: "Design" },
+                            { id: "marketing", label: "Marketing" }, { id: "productivity", label: "Productivity" },
+                            { id: "data", label: "Data & AI" }, { id: "devops", label: "DevOps" },
+                            { id: "other", label: "Other" },
+                          ].map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => setPubCategory(c.id)}
+                              className={`px-3 py-1 text-xs font-medium rounded-lg transition ${
+                                pubCategory === c.id
+                                  ? "bg-indigo-500 text-white"
+                                  : "bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300"
+                              }`}
+                            >{c.label}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div>
+                        <label className="text-xs text-slate-500 block mb-1">Tags (comma separated)</label>
+                        <input
+                          type="text"
+                          value={pubTags}
+                          onChange={e => setPubTags(e.target.value)}
+                          placeholder="nextjs, vercel, deployment"
+                          className="w-full px-3 py-2 bg-white/[0.03] border border-white/10 text-white text-sm placeholder-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between mt-4">
+                    <div>
+                      {pubSlug && pubPublic && (
+                        <a href={`/tutorial/${pubSlug}`} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1">
+                          <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                          View public page
+                        </a>
+                      )}
+                    </div>
+                    <button
+                      onClick={handlePublish}
+                      disabled={pubSaving}
+                      className="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-400 transition disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {pubSaving ? <Spin size={12} /> : null}
+                      {pubPublic ? "Save & Publish" : "Save as Private"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Tabs + Ask AI toggle */}
               <div className="flex items-center justify-between mb-5 border-b border-white/5 pb-px">

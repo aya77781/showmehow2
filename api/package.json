@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "stripe:listen": "stripe listen --forward-to localhost:5000/api/webhook --events checkout.session.completed,invoice.paid,customer.subscription.deleted"
   },
   "keywords": [],
   "author": "",
@@ -27,7 +28,8 @@
     "playwright-extra": "^4.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.34.5",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "stripe": "^20.4.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

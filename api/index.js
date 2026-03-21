@@ -15,6 +15,10 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
+
+// Stripe webhook needs raw body — MUST be before express.json()
+app.use('/api/webhook', require('./routes/webhook'));
+
 app.use(express.json());
 
 // Static files — serve session images/videos
@@ -29,6 +33,8 @@ mongoose
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tutorials', require('./routes/tutorial'));
+app.use('/api/stripe', require('./routes/stripe'));
+app.use('/api/explore', require('./routes/explore'));
 
 app.get('/', (req, res) => {
   res.json({ message: 'ShowMe AI API is running' });

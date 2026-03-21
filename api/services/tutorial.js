@@ -1,6 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { fal } = require('@fal-ai/client');
-const { execSync } = require('child_process');
+const { execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
@@ -408,20 +410,30 @@ If no specific element can be identified, reply: NONE`,
     const strokeWidth = 3;
     const fontSize = Math.max(14, Math.min(20, Math.round(imgH / 40)));
     const labelH = fontSize + 10;
-    const labelW = label.length * (fontSize * 0.6) + 16;
-    const labelX = Math.min(bx, imgW - labelW);
-    const labelY = by > labelH + 4 ? by - labelH - 4 : by + bh + 4;
+    const labelW = Math.min(label.length * (fontSize * 0.6) + 16, imgW - 10);
+    const labelX = Math.max(4, Math.min(bx, imgW - labelW - 4));
+    const labelYAbove = by - labelH - 4;
+    const labelYBelow = by + bh + 4;
+    const labelY = labelYAbove >= 0 ? labelYAbove : (labelYBelow + labelH <= imgH ? labelYBelow : Math.max(0, by - labelH));
+
+    const escSvg = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    // Ensure rect coords are positive
+    const rx = Math.max(0, bx - padding);
+    const ry = Math.max(0, by - padding);
+    const rw = Math.min(bw + padding * 2, imgW - rx);
+    const rh = Math.min(bh + padding * 2, imgH - ry);
 
     let svgOverlay = `<svg width="${imgW}" height="${imgH}">
-      <rect x="${bx - padding}" y="${by - padding}" width="${bw + padding * 2}" height="${bh + padding * 2}"
+      <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}"
             rx="6" ry="6" fill="none" stroke="#6366f1" stroke-width="${strokeWidth}" />
-      <rect x="${bx - padding - 1}" y="${by - padding - 1}" width="${bw + padding * 2 + 2}" height="${bh + padding * 2 + 2}"
+      <rect x="${Math.max(0, rx - 1)}" y="${Math.max(0, ry - 1)}" width="${Math.min(rw + 2, imgW)}" height="${Math.min(rh + 2, imgH)}"
             rx="7" ry="7" fill="none" stroke="rgba(99,102,241,0.3)" stroke-width="${strokeWidth + 4}" />`;
 
     if (label) {
       svgOverlay += `
       <rect x="${labelX}" y="${labelY}" width="${labelW}" height="${labelH}" rx="4" ry="4" fill="#6366f1" />
-      <text x="${labelX + 8}" y="${labelY + fontSize + 2}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${label.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`;
+      <text x="${labelX + 8}" y="${labelY + fontSize + 2}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${escSvg(label)}</text>`;
     }
 
     svgOverlay += `</svg>`;
@@ -521,6 +533,19 @@ function compositeClip(stepImagePath, avatarClipPath, outputPath) {
   return outputPath;
 }
 
+async function compositeClipAsync(stepImagePath, avatarClipPath, outputPath) {
+  await execAsync(
+    `ffmpeg -y -loop 1 -i "${stepImagePath}" -i "${avatarClipPath}" ` +
+    `-filter_complex "` +
+    `[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[bg];` +
+    `[1:v]scale=240:-1[avatar];` +
+    `[bg][avatar]overlay=W-w-20:H-h-20:shortest=1` +
+    `" -map 1:a -c:v libx264 -c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart -shortest "${outputPath}"`,
+    { timeout: 30000 }
+  );
+  return outputPath;
+}
+
 function concatenateVideos(clipPaths, outputPath) {
   const listFile = outputPath.replace('.mp4', '-list.txt');
   fs.writeFileSync(listFile, clipPaths.map(p => `file '${p}'`).join('\n'));
@@ -581,65 +606,65 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   const avatarUrl = await uploadToFal(avatarPath, 'image/png');
   emit('avatar:done', { reused: true });
 
-  // 2. TTS — all parallel
+  // 2. TTS → VEED → Composite — pipelined per narration (each starts VEED as soon as its TTS is ready)
   const narrations = [
     { text: intro, id: 'intro' },
     ...steps.map((s, i) => ({ text: s.description || s.title, id: `step-${i + 1}` })),
     { text: outro, id: 'outro' },
   ];
-  emit('tts:start', { total: narrations.length });
-  const ttsResults = await Promise.all(
-    narrations.map(n =>
-      generateTTS(n.text, path.join(audioDir, `${n.id}.wav`))
-        .then(f => { emit('tts:done', { id: n.id }); return f; })
-        .catch(err => { emit('tts:error', { id: n.id, error: err.message }); return null; })
-    )
-  );
-  emit('tts:complete', { success: ttsResults.filter(Boolean).length, time: Date.now() - t0 });
+  const imgDir = path.join(sessionDir, 'images');
 
-  // 3. VEED talking clips — all parallel
+  emit('tts:start', { total: narrations.length });
   emit('video:start', { total: narrations.length });
-  const avatarClips = await Promise.all(
-    narrations.map((n, i) => {
-      if (!ttsResults[i]) return null;
-      const clipFile = path.join(vidDir, `avatar-${n.id}.mp4`);
-      return generateTalkingClip(avatarUrl, ttsResults[i], clipFile, emit, n.id)
-        .catch(err => { emit('video:clip:error', { label: n.id, error: err.message }); return null; });
+
+  // Each narration runs its full pipeline independently: TTS → VEED → Composite
+  const pipelineResults = await Promise.all(
+    narrations.map(async (n, i) => {
+      // TTS
+      let ttsFile;
+      try {
+        ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));
+        emit('tts:done', { id: n.id });
+      } catch (err) {
+        emit('tts:error', { id: n.id, error: err.message });
+        return null;
+      }
+
+      // VEED talking clip (starts immediately after this narration's TTS)
+      let avatarClipFile;
+      try {
+        avatarClipFile = await generateTalkingClip(avatarUrl, ttsFile, path.join(vidDir, `avatar-${n.id}.mp4`), emit, n.id);
+      } catch (err) {
+        emit('video:clip:error', { label: n.id, error: err.message });
+        return null;
+      }
+
+      // Composite: screenshot bg + avatar PiP
+      const compositeFile = path.join(vidDir, `${n.id}.mp4`);
+      let bgImage = null;
+      if (n.id === 'intro') bgImage = steps[0]?.screenshot ? path.join(imgDir, steps[0].screenshot) : null;
+      else if (n.id === 'outro') bgImage = steps[steps.length - 1]?.screenshot ? path.join(imgDir, steps[steps.length - 1].screenshot) : null;
+      else {
+        const idx = parseInt(n.id.split('-')[1]) - 1;
+        bgImage = steps[idx]?.screenshot ? path.join(imgDir, steps[idx].screenshot) : null;
+      }
+
+      if (bgImage && fs.existsSync(bgImage)) {
+        try {
+          await compositeClipAsync(bgImage, avatarClipFile, compositeFile);
+          emit('video:composite:done', { label: n.id });
+          return compositeFile;
+        } catch {
+          return avatarClipFile;
+        }
+      }
+      return avatarClipFile;
     })
   );
-  emit('video:clips:done', { success: avatarClips.filter(Boolean).length, total: narrations.length, time: Date.now() - t0 });
 
-  // 4. Composite: screenshot bg + avatar PiP
-  emit('video:compositing', { total: narrations.length });
-  const imgDir = path.join(sessionDir, 'images');
-  const compositeClips = [];
-
-  for (let i = 0; i < narrations.length; i++) {
-    const n = narrations[i];
-    const avatarClipFile = avatarClips[i];
-    if (!avatarClipFile) continue;
-
-    const compositeFile = path.join(vidDir, `${n.id}.mp4`);
-    let bgImage = null;
-    if (n.id === 'intro') bgImage = steps[0]?.screenshot ? path.join(imgDir, steps[0].screenshot) : null;
-    else if (n.id === 'outro') bgImage = steps[steps.length - 1]?.screenshot ? path.join(imgDir, steps[steps.length - 1].screenshot) : null;
-    else {
-      const idx = parseInt(n.id.split('-')[1]) - 1;
-      bgImage = steps[idx]?.screenshot ? path.join(imgDir, steps[idx].screenshot) : null;
-    }
-
-    if (bgImage && fs.existsSync(bgImage)) {
-      try {
-        compositeClip(bgImage, avatarClipFile, compositeFile);
-        compositeClips.push(compositeFile);
-        emit('video:composite:done', { label: n.id });
-      } catch {
-        compositeClips.push(avatarClipFile);
-      }
-    } else {
-      compositeClips.push(avatarClipFile);
-    }
-  }
+  const compositeClips = pipelineResults.filter(Boolean);
+  emit('tts:complete', { success: compositeClips.length, time: Date.now() - t0 });
+  emit('video:clips:done', { success: compositeClips.length, total: narrations.length, time: Date.now() - t0 });
 
   // 5. Concatenate → final video
   const finalPath = path.join(sessionDir, 'final-video.mp4');

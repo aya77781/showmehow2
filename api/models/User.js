@@ -29,6 +29,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    stripeCustomerId: { type: String, default: null },
+    plan: {
+      type: String,
+      enum: ['free', 'single', 'pro'],
+      default: 'free',
+    },
+    credits: { type: Number, default: 0 }, // single-use credits
+    stripeSubscriptionId: { type: String, default: null },
+    planExpiresAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

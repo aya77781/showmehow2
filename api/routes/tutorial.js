@@ -7,68 +7,94 @@ const claude = new Anthropic();
 
 // GET /api/tutorials — list user's projects
 router.get('/', auth, async (req, res) => {
-  const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 });
-  res.json(projects);
+  try {
+    const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 });
+    res.json(projects);
+  } catch (err) {
+    console.error('List projects error:', err);
+    res.status(500).json({ error: 'Failed to load projects' });
+  }
 });
 
 // GET /api/tutorials/:id — get single project
 router.get('/:id', auth, async (req, res) => {
-  const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json(project);
+  try {
+    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json(project);
+  } catch (err) {
+    console.error('Get project error:', err);
+    res.status(500).json({ error: 'Failed to load project' });
+  }
 });
 
 // POST /api/tutorials — create project (just saves topic, socket handles generation)
 router.post('/', auth, async (req, res) => {
-  const { topic } = req.body;
-  if (!topic?.trim()) return res.status(400).json({ error: 'Topic is required' });
+  try {
+    const { topic } = req.body;
+    if (!topic?.trim()) return res.status(400).json({ error: 'Topic is required' });
 
-  const project = await Project.create({
-    user: req.user.id,
-    topic: topic.trim(),
-    status: 'draft',
-  });
+    const project = await Project.create({
+      user: req.user.id,
+      topic: topic.trim(),
+      status: 'draft',
+    });
 
-  res.status(201).json(project);
+    res.status(201).json(project);
+  } catch (err) {
+    console.error('Create project error:', err);
+    res.status(500).json({ error: 'Failed to create project' });
+  }
 });
 
 // PUT /api/tutorials/:id/steps — update steps (user edits before video generation)
 router.put('/:id/steps', auth, async (req, res) => {
-  const { steps } = req.body;
-  if (!steps?.length) return res.status(400).json({ error: 'Steps are required' });
+  try {
+    const { steps } = req.body;
+    if (!steps?.length) return res.status(400).json({ error: 'Steps are required' });
 
-  const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
-  if (!project) return res.status(404).json({ error: 'Project not found' });
+    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  project.tutorial.steps = steps;
-  await project.save();
-  res.json(project);
+    project.tutorial.steps = steps;
+    await project.save();
+    res.json(project);
+  } catch (err) {
+    console.error('Update steps error:', err);
+    res.status(500).json({ error: 'Failed to update steps' });
+  }
 });
 
 // PUT /api/tutorials/:id/pick-image — user picks a different candidate image for a step
 router.put('/:id/pick-image', auth, async (req, res) => {
-  const { stepIndex, candidateFile } = req.body;
-  const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (!project.sessionId) return res.status(400).json({ error: 'No session' });
+  try {
+    const { stepIndex, candidateFile } = req.body;
+    if (typeof stepIndex !== 'number' || stepIndex < 0) return res.status(400).json({ error: 'Invalid step index' });
 
-  const step = project.tutorial?.steps?.[stepIndex];
-  if (!step) return res.status(400).json({ error: 'Invalid step index' });
-  if (!step.candidates?.includes(candidateFile)) return res.status(400).json({ error: 'Invalid candidate' });
+    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    if (!project.sessionId) return res.status(400).json({ error: 'No session' });
 
-  const fs = require('fs');
-  const path = require('path');
-  const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', project.sessionId, 'images');
-  const stepNum = String(step.step).padStart(2, '0');
-  const mainFile = `step-${stepNum}.png`;
+    const step = project.tutorial?.steps?.[stepIndex];
+    if (!step) return res.status(400).json({ error: 'Invalid step index' });
+    if (!step.candidates?.includes(candidateFile)) return res.status(400).json({ error: 'Invalid candidate' });
 
-  // Copy the chosen candidate as the main screenshot
-  fs.copyFileSync(path.join(imgDir, candidateFile), path.join(imgDir, mainFile));
-  step.screenshot = mainFile;
-  step.picked = step.candidates.indexOf(candidateFile);
-  await project.save();
+    const fs = require('fs');
+    const path = require('path');
+    const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', project.sessionId, 'images');
+    const stepNum = String(step.step).padStart(2, '0');
+    const mainFile = `step-${stepNum}.png`;
 
-  res.json({ ok: true, step: step.step, screenshot: mainFile, picked: step.picked });
+    fs.copyFileSync(path.join(imgDir, candidateFile), path.join(imgDir, mainFile));
+    step.screenshot = mainFile;
+    step.picked = step.candidates.indexOf(candidateFile);
+    await project.save();
+
+    res.json({ ok: true, step: step.step, screenshot: mainFile, picked: step.picked });
+  } catch (err) {
+    console.error('Pick image error:', err);
+    res.status(500).json({ error: 'Failed to update image' });
+  }
 });
 
 // POST /api/tutorials/:id/chat — RAG chat about the tutorial topic
@@ -134,9 +160,14 @@ RULES:
 
 // DELETE /api/tutorials/:id
 router.delete('/:id', auth, async (req, res) => {
-  const project = await Project.findOneAndDelete({ _id: req.params.id, user: req.user.id });
-  if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json({ message: 'Project deleted' });
+  try {
+    const project = await Project.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+    if (!project) return res.status(404).json({ error: 'Project not found' });
+    res.json({ message: 'Project deleted' });
+  } catch (err) {
+    console.error('Delete project error:', err);
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
 });
 
 module.exports = router;

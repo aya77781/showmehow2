@@ -1,0 +1,7 @@
+node_modules
+.env
+.env.*
+output/sessions/*
+assets/avatar.png
+npm-debug.log
+.git

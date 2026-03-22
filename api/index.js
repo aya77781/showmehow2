@@ -7,6 +7,7 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
@@ -22,7 +23,7 @@ app.use('/api/webhook', require('./routes/webhook'));
 app.use(express.json());
 
 // Static files — serve session images/videos
-app.use('/output', express.static('output'));
+app.use('/output', express.static('output', { maxAge: '1d' }));
 
 // MongoDB Connection
 mongoose
@@ -42,6 +43,22 @@ app.get('/', (req, res) => {
 
 // Socket.IO — tutorial real-time events
 require('./sockets/tutorial')(io);
+
+// Startup config log
+console.log('[Config]', {
+  PORT,
+  CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:3000',
+  API_URL: process.env.API_URL || `http://localhost:${PORT}`,
+  MONGO_URI: process.env.MONGO_URI ? '✓ set' : '✗ MISSING',
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '✓ set' : '✗ MISSING',
+  FAL_KEY: process.env.FAL_KEY ? '✓ set' : '✗ MISSING',
+  FAL_KEY_BACKUP: process.env.FAL_KEY_BACKUP ? '✓ set' : '✗ MISSING',
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY ? '✓ set' : '✗ MISSING',
+  ELEVENLABS_API_KEY_BACKUP: process.env.ELEVENLABS_API_KEY_BACKUP ? '✓ set' : '✗ MISSING',
+  SERPER_API_KEY: process.env.SERPER_API_KEY ? '✓ set' : '✗ MISSING',
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '✓ set' : '✗ MISSING',
+  SKIP_AVATAR: process.env.SKIP_AVATAR || 'false',
+});
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

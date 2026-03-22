@@ -29,16 +29,37 @@ function switchFalKey() {
   return true;
 }
 
-async function falWithRetry(fn) {
+async function falWithRetry(fn, label = '') {
   try {
     return await fn();
   } catch (err) {
-    const msg = err?.message || '';
-    const isKeyError = msg.includes('401') || msg.includes('403') || msg.includes('quota') || msg.includes('rate') || msg.includes('limit') || msg.includes('unauthorized') || msg.includes('Unauthorized');
+    const msg = (err?.message || '') + ' ' + JSON.stringify(err?.body || err?.response?.data || '');
+    const isKeyError = /401|403|quota|rate|limit|unauthorized|forbidden|exceeded|insufficient/i.test(msg);
+    const isServerError = /500|502|503|504|timeout|ETIMEDOUT|ECONNRESET|socket hang up/i.test(msg);
+
+    console.warn(`[fal] ${label} failed with key #${falKeyIndex + 1}: ${msg.slice(0, 120)}`);
+
     if (isKeyError && switchFalKey()) {
-      console.log(`[fal] Key failed (${msg.slice(0, 80)}), retrying with backup key...`);
+      console.log(`[fal] ${label} → switched to backup key #${falKeyIndex + 1}, retrying...`);
       return await fn();
     }
+
+    // For server errors, retry once with same key after short delay
+    if (isServerError) {
+      console.log(`[fal] ${label} → server error, retrying in 3s...`);
+      await new Promise(r => setTimeout(r, 3000));
+      try {
+        return await fn();
+      } catch (retryErr) {
+        // If retry fails and we have another key, try that
+        if (switchFalKey()) {
+          console.log(`[fal] ${label} → retry failed, trying backup key #${falKeyIndex + 1}...`);
+          return await fn();
+        }
+        throw retryErr;
+      }
+    }
+
     throw err;
   }
 }

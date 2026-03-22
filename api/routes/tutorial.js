@@ -122,8 +122,9 @@ RULES:
 - ONLY answer questions related to "${project.topic}" and closely related subjects.
 - If the user asks about something completely unrelated, politely redirect them back to the topic.
 - Use web_search when you need up-to-date information or to verify facts about this topic.
-- Be concise and practical. Give actionable answers.
-- Reference specific steps from the tutorial when relevant.
+- Be SHORT and concise. Maximum 2-4 sentences per answer. Use bullet points for lists. Never write walls of text.
+- When referencing a step from the tutorial, use this exact format: [step:N] where N is the step number. Example: "Check [step:3] for details on deployment." The UI will render these as clickable links.
+- If the user asks about a specific step (e.g. "explain step 3", "tell me about chapter 2"), give a focused explanation of that step and use [step:N] to link to it.
 - Answer in the same language the user writes in.`;
 
   // Build messages from history
@@ -138,7 +139,7 @@ RULES:
   try {
     const response = await claude.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      max_tokens: 400,
       system: systemPrompt,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
       messages,

@@ -59,6 +59,31 @@ function ago(d: string) {
   if (h < 24) return `${h}h`; return `${Math.floor(h / 24)}d`;
 }
 
+function ChatContent({ text, onStepClick }: { text: string; onStepClick: (step: number) => void }) {
+  const parts = text.split(/(\[step:\d+\])/g);
+  return (
+    <div className="whitespace-pre-wrap">
+      {parts.map((part, i) => {
+        const match = part.match(/^\[step:(\d+)\]$/);
+        if (match) {
+          const stepNum = parseInt(match[1]);
+          return (
+            <button
+              key={i}
+              onClick={() => onStepClick(stepNum - 1)}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 bg-indigo-500/20 border border-indigo-500/30 rounded-md text-indigo-300 hover:bg-indigo-500/30 hover:text-indigo-200 transition text-[12px] font-medium"
+            >
+              <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+              Step {stepNum}
+            </button>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </div>
+  );
+}
+
 // ── Component ───────────────────────────────────────────────
 export default function Dashboard() {
   const router = useRouter();
@@ -982,7 +1007,7 @@ export default function Dashboard() {
                               : "bg-white/[0.05] text-slate-300 border border-white/5 rounded-bl-md"
                           }`}>
                             {m.role === "assistant" ? (
-                              <div className="whitespace-pre-wrap">{m.content}</div>
+                              <ChatContent text={m.content} onStepClick={(idx) => { setActiveStep(idx); setViewTab("steps"); }} />
                             ) : m.content}
                           </div>
                         </div>

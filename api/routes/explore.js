@@ -1,7 +1,26 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const Project = require('../models/Project');
 const auth = require('../middleware/auth');
+
+function findThumbnail(sessionId, screenshot) {
+  if (!sessionId) return null;
+  const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', sessionId, 'images');
+  // Try the DB screenshot first
+  if (screenshot && fs.existsSync(path.join(imgDir, screenshot))) {
+    return `/output/sessions/${sessionId}/images/${screenshot}`;
+  }
+  // Fallback: try step-01 with common extensions
+  for (const ext of ['png', 'jpg', 'jpeg']) {
+    const file = `step-01.${ext}`;
+    if (fs.existsSync(path.join(imgDir, file))) {
+      return `/output/sessions/${sessionId}/images/${file}`;
+    }
+  }
+  return null;
+}
 
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,9 +76,7 @@ router.get('/', async (req, res) => {
       views: t.views || 0,
       likes: t.likes || 0,
       sessionId: t.sessionId,
-      thumbnail: t.sessionId && t.tutorial?.steps?.[0]?.screenshot
-        ? `/output/sessions/${t.sessionId}/images/${t.tutorial.steps[0].screenshot}`
-        : null,
+      thumbnail: findThumbnail(t.sessionId, t.tutorial?.steps?.[0]?.screenshot),
       author: { name: t.user?.name, picture: t.user?.picture },
       createdAt: t.createdAt,
     }));

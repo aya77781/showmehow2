@@ -569,7 +569,7 @@ export default function Landing() {
               {(tutorials.length > 0
                 ? tutorials.slice(0, 3).map(t => ({
                     url: `/tutorial/${t.slug}`,
-                    title: t.tutorial?.title || t.topic,
+                    title: t.title || t.topic,
                     views: `${t.views || 0} views`,
                   }))
                 : [

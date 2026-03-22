@@ -86,7 +86,7 @@ function ExploreInner() {
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <a href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">AI</span></a>
+          <a href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
           <div className="flex items-center gap-3">
             <a href="/pricing" className="text-sm text-slate-400 hover:text-white transition">Pricing</a>
             <a href="/login" className="px-3 py-1.5 text-sm bg-indigo-500 rounded-lg hover:bg-indigo-400 transition font-medium">Sign In</a>

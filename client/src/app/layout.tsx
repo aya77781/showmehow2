@@ -9,7 +9,7 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "ShowMe AI — AI-Generated Video Tutorials",
+  title: "ShowMeHow.ai — AI-Generated Video Tutorials",
   description: "Generate personalized video tutorials with AI in under 2 minutes",
 };
 

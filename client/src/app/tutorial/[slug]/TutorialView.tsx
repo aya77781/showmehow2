@@ -62,7 +62,7 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
       <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <Link href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">AI</span></Link>
+            <Link href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></Link>
             <span className="text-slate-800">|</span>
             <Link href="/explore" className="text-sm text-slate-500 hover:text-white transition flex items-center gap-1.5">
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
@@ -403,7 +403,7 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
       {/* ── Footer ─────────────────────────────────────── */}
       <footer className="border-t border-white/5 mt-16 py-8 px-6">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between text-xs text-slate-700">
-          <span>ShowMe<span className="text-indigo-400">AI</span> — AMS GenAI &amp; Video Hackathon 2026</span>
+          <span>ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span> — AMS GenAI &amp; Video Hackathon 2026</span>
           <div className="flex gap-4">
             <Link href="/explore" className="hover:text-slate-400 transition">Explore</Link>
             <Link href="/pricing" className="hover:text-slate-400 transition">Pricing</Link>

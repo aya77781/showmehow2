@@ -92,7 +92,7 @@ function PricingInner() {
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
-          <a href="/dashboard" className="text-xl font-bold">ShowMe<span className="text-indigo-400">AI</span></a>
+          <a href="/dashboard" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
               {userPlan?.isPro && (

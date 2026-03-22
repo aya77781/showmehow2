@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!tutorial) return { title: "Tutorial Not Found" };
 
   return {
-    title: `${tutorial.title} — ShowMe AI Tutorial`,
+    title: `${tutorial.title} — ShowMeHow.ai Tutorial`,
     description: `Learn ${tutorial.title} step by step with an AI-generated video tutorial. ${tutorial.steps?.length || 0} steps with real screenshots.`,
     openGraph: {
       title: tutorial.title,
@@ -58,7 +58,7 @@ export default async function TutorialPage({ params }: Props) {
       position: s.step,
       image: s.screenshot && tutorial.sessionId ? `${API}/output/sessions/${tutorial.sessionId}/images/${s.screenshot}` : undefined,
     })),
-    author: { "@type": "Person", name: tutorial.author?.name || "ShowMe AI" },
+    author: { "@type": "Person", name: tutorial.author?.name || "ShowMeHow.ai" },
   };
 
   return (

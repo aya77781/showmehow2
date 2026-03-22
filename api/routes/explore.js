@@ -38,7 +38,7 @@ router.get('/', async (req, res) => {
 
     const [tutorials, total] = await Promise.all([
       Project.find(filter)
-        .select('topic slug category tags views likes tutorial.title tutorial.steps.length sessionId createdAt')
+        .select('topic slug category tags views likes tutorial.title tutorial.steps sessionId createdAt')
         .populate('user', 'name picture')
         .sort(sortBy)
         .skip(skip)

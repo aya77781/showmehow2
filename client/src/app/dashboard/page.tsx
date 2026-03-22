@@ -408,7 +408,7 @@ export default function Dashboard() {
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <span className="text-xl font-bold">ShowMe<span className="text-indigo-400">AI</span></span>
+            <span className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></span>
             <button onClick={handleNew} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-400 transition">
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
               New

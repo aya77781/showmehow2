@@ -8,8 +8,73 @@ const path = require('path');
 const sharp = require('sharp');
 
 const client = new Anthropic();
-if (process.env.FAL_KEY) {
-  fal.config({ credentials: process.env.FAL_KEY });
+
+// ── fal.ai key management with auto-fallback ──
+const FAL_KEYS = [process.env.FAL_KEY, process.env.FAL_KEY_BACKUP].filter(Boolean);
+let falKeyIndex = 0;
+
+function activateFalKey(index) {
+  if (FAL_KEYS[index]) {
+    falKeyIndex = index;
+    fal.config({ credentials: FAL_KEYS[index] });
+    console.log(`[fal] Using key #${index + 1}`);
+  }
+}
+activateFalKey(0);
+
+function switchFalKey() {
+  const next = (falKeyIndex + 1) % FAL_KEYS.length;
+  if (next === falKeyIndex) return false; // no other key
+  activateFalKey(next);
+  return true;
+}
+
+async function falWithRetry(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err?.message || '';
+    const isKeyError = msg.includes('401') || msg.includes('403') || msg.includes('quota') || msg.includes('rate') || msg.includes('limit') || msg.includes('unauthorized') || msg.includes('Unauthorized');
+    if (isKeyError && switchFalKey()) {
+      console.log(`[fal] Key failed (${msg.slice(0, 80)}), retrying with backup key...`);
+      return await fn();
+    }
+    throw err;
+  }
+}
+
+// ── ElevenLabs TTS fallback ──
+const ELEVENLABS_KEYS = [process.env.ELEVENLABS_API_KEY, process.env.ELEVENLABS_API_KEY_BACKUP].filter(Boolean);
+
+async function elevenLabsTTS(text, outputPath) {
+  const cleanText = text.replace(/<[^>]+>/g, '');
+  for (let i = 0; i < ELEVENLABS_KEYS.length; i++) {
+    try {
+      const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL', {
+        method: 'POST',
+        headers: {
+          'xi-api-key': ELEVENLABS_KEYS[i],
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: cleanText,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`ElevenLabs ${res.status}: ${errText.slice(0, 100)}`);
+      }
+      fs.writeFileSync(outputPath, Buffer.from(await res.arrayBuffer()));
+      console.log(`[TTS] ElevenLabs fallback succeeded with key #${i + 1}`);
+      return outputPath;
+    } catch (err) {
+      console.warn(`[TTS] ElevenLabs key #${i + 1} failed: ${err.message}`);
+      if (i === ELEVENLABS_KEYS.length - 1) throw err;
+    }
+  }
+  throw new Error('All ElevenLabs keys exhausted');
 }
 
 const OUT_DIR = path.resolve(__dirname, '..', 'output', 'sessions');
@@ -23,13 +88,13 @@ async function getOrCreateAvatar() {
   const avatarPath = path.join(ASSETS_DIR, 'avatar.png');
   if (fs.existsSync(avatarPath)) return avatarPath;
 
-  const result = await fal.subscribe('fal-ai/flux/dev', {
+  const result = await falWithRetry(() => fal.subscribe('fal-ai/flux/dev', {
     input: {
       prompt: 'Professional young woman, late 20s, friendly warm smile, looking directly at camera, shoulders up headshot portrait, solid light gray background, studio lighting, photorealistic, high quality',
       image_size: { width: 512, height: 512 },
       num_images: 1,
     },
-  });
+  }));
   const imageUrl = result.data?.images?.[0]?.url;
   if (!imageUrl) throw new Error('Failed to generate avatar');
   const res = await fetch(imageUrl);
@@ -38,9 +103,11 @@ async function getOrCreateAvatar() {
 }
 
 async function uploadToFal(filePath, mimeType) {
-  const buffer = fs.readFileSync(filePath);
-  const blob = new Blob([buffer], { type: mimeType });
-  return await fal.storage.upload(blob);
+  return await falWithRetry(async () => {
+    const buffer = fs.readFileSync(filePath);
+    const blob = new Blob([buffer], { type: mimeType });
+    return await fal.storage.upload(blob);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -484,14 +551,24 @@ async function fetchAllImages(steps, imgDir, tutorialTitle, emit = () => {}) {
 // TTS — xAI via fal.ai
 // ═══════════════════════════════════════════════════════════════
 async function generateTTS(text, outputPath) {
-  const result = await fal.subscribe('xai/tts/v1', {
-    input: { text: text.replace(/<[^>]+>/g, ''), voice: 'eve', language: 'en' },
-  });
-  const audioUrl = result.data?.audio?.url;
-  if (!audioUrl) throw new Error('No audio from TTS');
-  const res = await fetch(audioUrl);
-  fs.writeFileSync(outputPath, Buffer.from(await res.arrayBuffer()));
-  return outputPath;
+  // Try xAI TTS via fal.ai first
+  try {
+    const result = await falWithRetry(() => fal.subscribe('xai/tts/v1', {
+      input: { text: text.replace(/<[^>]+>/g, ''), voice: 'eve', language: 'en' },
+    }));
+    const audioUrl = result.data?.audio?.url;
+    if (!audioUrl) throw new Error('No audio from xAI TTS');
+    const res = await fetch(audioUrl);
+    fs.writeFileSync(outputPath, Buffer.from(await res.arrayBuffer()));
+    return outputPath;
+  } catch (err) {
+    console.warn(`[TTS] xAI failed (${err.message}), trying ElevenLabs fallback...`);
+  }
+  // Fallback: ElevenLabs
+  if (ELEVENLABS_KEYS.length > 0) {
+    return await elevenLabsTTS(text, outputPath);
+  }
+  throw new Error('All TTS providers failed and no ElevenLabs key configured');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -501,12 +578,12 @@ async function generateTalkingClip(avatarUrl, audioPath, outputPath, emit, label
   const audioUrl = await uploadToFal(audioPath, 'audio/wav');
   emit('video:clip:progress', { label, status: 'GENERATING' });
 
-  const result = await fal.subscribe('veed/fabric-1.0', {
+  const result = await falWithRetry(() => fal.subscribe('veed/fabric-1.0', {
     input: { image_url: avatarUrl, audio_url: audioUrl, resolution: '480p' },
     onQueueUpdate(update) {
       emit('video:clip:progress', { label, status: update.status, position: update.position || null });
     },
-  });
+  }));
 
   const videoUrl = result.data?.video?.url;
   if (!videoUrl) throw new Error('No video from VEED');

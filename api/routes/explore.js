@@ -57,7 +57,9 @@ router.get('/', async (req, res) => {
       views: t.views || 0,
       likes: t.likes || 0,
       sessionId: t.sessionId,
-      thumbnail: t.sessionId ? `/output/sessions/${t.sessionId}/images/step-01.png` : null,
+      thumbnail: t.sessionId && t.tutorial?.steps?.[0]?.screenshot
+        ? `/output/sessions/${t.sessionId}/images/${t.tutorial.steps[0].screenshot}`
+        : null,
       author: { name: t.user?.name, picture: t.user?.picture },
       createdAt: t.createdAt,
     }));

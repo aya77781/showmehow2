@@ -473,7 +473,7 @@ export default function Dashboard() {
                 <p className="text-slate-500 text-sm">Type any topic — we&apos;ll research it, capture real screenshots, and generate a narrated video tutorial.</p>
               </div>
 
-              <div className="relative">
+              <div className="space-y-3">
                 <input
                   ref={inputRef}
                   type="text"
@@ -481,15 +481,16 @@ export default function Dashboard() {
                   onChange={e => setTopic(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleGenerate()}
                   placeholder="e.g. How to deploy a Next.js app on Vercel"
-                  className="w-full px-5 py-4 pr-32 bg-white/[0.03] border border-white/10 text-white text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
+                  className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 text-white text-base md:text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
                 />
                 <button
                   onClick={handleGenerate}
                   disabled={!topic.trim()}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-5 py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
+                  className="w-full sm:w-auto sm:float-right px-5 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
                 >
                   Generate
                 </button>
+                <div className="clear-both" />
               </div>
 
               {error && <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2"><span>✕</span>{error}</div>}
@@ -502,7 +503,7 @@ export default function Dashboard() {
               </div>
 
               {projects.length === 0 && !topic && (
-                <div className="mt-12 grid grid-cols-3 gap-4">
+                <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
                     { icon: "🔍", title: "AI Research", desc: "Claude searches the web and writes a structured script" },
                     { icon: "📸", title: "Screenshots", desc: "AI finds and validates real screenshots for each step" },
@@ -598,35 +599,33 @@ export default function Dashboard() {
           {phase === "complete" && steps.length > 0 && (
             <div>
               {/* Header */}
-              <div className="flex items-start justify-between mb-5 gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 bg-green-400 rounded-full" /><span className="text-green-400 text-xs font-medium">Complete</span></div>
-                  <h2 className="text-2xl font-bold">{current?.tutorial?.title || topic}</h2>
-                  <p className="text-slate-500 text-sm mt-1">
-                    {steps.length} steps{stats?.totalTime ? ` — ${fmtMs(stats.totalTime)}` : ""}
-                    {current?.tutorial?.source ? ` — ${current.tutorial.source}` : ""}
-                  </p>
-                </div>
-                <div className="flex gap-2 shrink-0">
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-1"><span className="w-2 h-2 bg-green-400 rounded-full" /><span className="text-green-400 text-xs font-medium">Complete</span></div>
+                <h2 className="text-xl md:text-2xl font-bold">{current?.tutorial?.title || topic}</h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  {steps.length} steps{stats?.totalTime ? ` — ${fmtMs(stats.totalTime)}` : ""}
+                  {current?.tutorial?.source ? ` — ${current.tutorial.source}` : ""}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3">
                   <button
                     onClick={() => setPublishOpen(!publishOpen)}
-                    className={`px-3 py-2 text-sm font-medium rounded-lg transition flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition flex items-center gap-1.5 ${
                       pubPublic
                         ? "bg-green-500/10 border border-green-500/30 text-green-400"
                         : "border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white"
                     }`}
                   >
-                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
                     {pubPublic ? "Public" : "Publish"}
                   </button>
                   {finalVideo && sessionId && (
                     <a
                       href={`${API}/output/sessions/${sessionId}/${finalVideo}`}
                       download={`${(current?.tutorial?.title || topic).replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-")}.mp4`}
-                      className="px-3 py-2 text-sm font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
                     >
-                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                      Download
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                      <span className="hidden sm:inline">Download</span>
                     </a>
                   )}
                   {finalVideo && sessionId && (
@@ -635,14 +634,14 @@ export default function Dashboard() {
                         navigator.clipboard.writeText(`${API}/output/sessions/${sessionId}/${finalVideo}`);
                         addLog("Video link copied to clipboard");
                       }}
-                      className="px-3 py-2 text-sm font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-1.5"
                       title="Copy video link"
                     >
-                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                      Share
+                      <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                      <span className="hidden sm:inline">Share</span>
                     </button>
                   )}
-                  <button onClick={handleNew} className="px-3 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg hover:bg-indigo-400 transition flex items-center gap-1.5">
+                  <button onClick={handleNew} className="px-3 py-1.5 bg-indigo-500 text-white text-xs font-medium rounded-lg hover:bg-indigo-400 transition flex items-center gap-1.5">
                     <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"/></svg>
                     New
                   </button>
@@ -732,7 +731,7 @@ export default function Dashboard() {
               )}
 
               {/* Tabs + Ask AI toggle */}
-              <div className="flex items-center justify-between mb-5 border-b border-white/5 pb-px">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-5 border-b border-white/5 pb-px">
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setViewTab("video")}
@@ -849,6 +848,20 @@ export default function Dashboard() {
                           <h3 className="text-base font-bold"><span className="text-indigo-400 mr-1.5">Step {steps[activeStep]?.step}.</span>{steps[activeStep]?.title}</h3>
                           <p className="text-slate-400 text-sm mt-1 leading-relaxed">{steps[activeStep]?.description}</p>
                         </div>
+                        {/* Mobile step nav */}
+                        <div className="flex gap-2 mt-4 md:hidden">
+                          <button
+                            onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+                            disabled={activeStep === 0}
+                            className="flex-1 px-3 py-2 text-xs font-medium rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition disabled:opacity-20 disabled:cursor-not-allowed"
+                          >Prev</button>
+                          <span className="px-3 py-2 text-xs text-slate-600 font-mono">{activeStep + 1}/{steps.length}</span>
+                          <button
+                            onClick={() => setActiveStep(Math.min(steps.length - 1, activeStep + 1))}
+                            disabled={activeStep === steps.length - 1}
+                            className="flex-1 px-3 py-2 text-xs font-medium rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 transition disabled:opacity-20 disabled:cursor-not-allowed"
+                          >Next</button>
+                        </div>
                       </div>
 
                       {/* Steps nav */}
@@ -961,7 +974,7 @@ export default function Dashboard() {
 
                 {/* ── Chat Side Panel (Coursera-style) ─────────── */}
                 {chatOpen && (
-                  <div className="w-80 shrink-0 flex flex-col border-l border-white/5 pl-5" style={{ height: "calc(100vh - 220px)" }}>
+                  <div className="fixed inset-0 z-40 bg-slate-950/95 backdrop-blur-sm flex flex-col p-4 pt-14 md:static md:inset-auto md:z-auto md:bg-transparent md:backdrop-blur-none md:p-0 md:w-80 md:shrink-0 md:flex md:flex-col md:border-l md:border-white/5 md:pl-5" style={{ height: "calc(100vh - 220px)" }}>
                     {/* Chat header */}
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">

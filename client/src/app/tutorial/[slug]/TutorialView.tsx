@@ -60,26 +60,26 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
     <div className="min-h-screen bg-slate-950 text-white">
       {/* ── Header ─────────────────────────────────────── */}
       <header className="border-b border-white/5 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-5">
-            <Link href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></Link>
-            <span className="text-slate-800">|</span>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3 sm:gap-5">
+            <Link href="/" className="text-lg sm:text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></Link>
+            <span className="text-slate-800 hidden sm:inline">|</span>
             <Link href="/explore" className="text-sm text-slate-500 hover:text-white transition flex items-center gap-1.5">
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
-              Explore
+              <span className="hidden sm:inline">Explore</span>
             </Link>
           </div>
           <div className="flex items-center gap-3">
-            <Link href="/login?tab=register" className="px-4 py-1.5 text-sm bg-indigo-500 rounded-lg hover:bg-indigo-400 transition font-medium">
+            <Link href="/login?tab=register" className="px-3 sm:px-4 py-1.5 text-xs sm:text-sm bg-indigo-500 rounded-lg hover:bg-indigo-400 transition font-medium">
               Create your own
             </Link>
           </div>
         </div>
       </header>
 
-      <div className="max-w-[1400px] mx-auto px-6 py-6">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* ── Breadcrumb ─────────────────────────────────── */}
-        <nav className="flex items-center gap-2 text-xs text-slate-600 mb-5">
+        <nav className="flex items-center gap-2 text-xs text-slate-600 mb-4 sm:mb-5 overflow-x-auto">
           <Link href="/explore" className="hover:text-slate-400 transition">Explore</Link>
           <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
           <Link href={`/explore?category=${tutorial.category}`} className="hover:text-slate-400 transition">
@@ -91,9 +91,9 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
 
         {/* ── Title + Meta ───────────────────────────────── */}
         <div className="mb-6">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
             <div className="min-w-0">
-              <h1 className="text-2xl md:text-3xl font-bold leading-tight">{tutorial.title}</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight">{tutorial.title}</h1>
               <div className="flex items-center gap-4 mt-3 flex-wrap">
                 {/* Author */}
                 <div className="flex items-center gap-2">
@@ -120,7 +120,7 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
             </div>
 
             {/* Action buttons */}
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-2 shrink-0 self-start">
               <button
                 onClick={handleLike}
                 className={`px-3 py-2 text-sm font-medium rounded-lg border transition flex items-center gap-1.5 ${
@@ -260,7 +260,31 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
 
         {/* ── Step by Step Tab ────────────────────────────── */}
         {viewMode === "steps" && (
-          <div className="flex gap-6">
+          <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+            {/* Mobile step nav */}
+            <div className="flex items-center gap-2 md:hidden">
+              <button
+                onClick={() => setActiveStep(Math.max(0, activeStep - 1))}
+                disabled={activeStep === 0}
+                className="p-2 rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition disabled:opacity-20"
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+              <div className="flex-1 text-center">
+                <span className="text-xs text-slate-500">Step {activeStep + 1} / {tutorial.steps.length}</span>
+                <div className="h-1 bg-white/5 rounded-full overflow-hidden mt-1">
+                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${((activeStep + 1) / tutorial.steps.length) * 100}%` }} />
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveStep(Math.min(tutorial.steps.length - 1, activeStep + 1))}
+                disabled={activeStep === tutorial.steps.length - 1}
+                className="p-2 rounded-lg border border-white/10 text-slate-400 hover:bg-white/5 transition disabled:opacity-20"
+              >
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+              </button>
+            </div>
+
             {/* Main player */}
             <div className="flex-1 min-w-0">
               {step?.video && tutorial.sessionId ? (
@@ -381,7 +405,7 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
         )}
 
         {/* ── CTA ─────────────────────────────────────────── */}
-        <div className="mt-12 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20 rounded-2xl p-8 text-center max-w-2xl mx-auto">
+        <div className="mt-10 sm:mt-12 bg-gradient-to-r from-indigo-500/5 to-purple-500/5 border border-indigo-500/20 rounded-2xl p-5 sm:p-8 text-center max-w-2xl mx-auto">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 mb-4">
             <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-indigo-400"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </div>
@@ -389,11 +413,11 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
           <p className="text-slate-400 text-sm mb-5 max-w-md mx-auto">
             Type any topic and get a personalized AI video tutorial in under 2 minutes. Free to start.
           </p>
-          <div className="flex gap-3 justify-center">
-            <Link href="/login?tab=register" className="px-6 py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition shadow-lg shadow-indigo-500/20">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href="/login?tab=register" className="px-6 py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition shadow-lg shadow-indigo-500/20 text-sm sm:text-base">
               Get Started Free
             </Link>
-            <Link href="/explore" className="px-6 py-2.5 bg-white/5 border border-white/10 text-slate-300 font-medium rounded-xl hover:bg-white/10 transition">
+            <Link href="/explore" className="px-6 py-2.5 bg-white/5 border border-white/10 text-slate-300 font-medium rounded-xl hover:bg-white/10 transition text-sm sm:text-base">
               Browse more
             </Link>
           </div>
@@ -401,8 +425,8 @@ export default function TutorialView({ tutorial, api }: { tutorial: Tutorial; ap
       </div>
 
       {/* ── Footer ─────────────────────────────────────── */}
-      <footer className="border-t border-white/5 mt-16 py-8 px-6">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between text-xs text-slate-700">
+      <footer className="border-t border-white/5 mt-12 sm:mt-16 py-6 sm:py-8 px-4 sm:px-6">
+        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-700">
           <span>ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span> — AMS GenAI &amp; Video Hackathon 2026</span>
           <div className="flex gap-4">
             <Link href="/explore" className="hover:text-slate-400 transition">Explore</Link>

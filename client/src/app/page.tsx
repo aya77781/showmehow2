@@ -175,19 +175,19 @@ export default function Landing() {
 
           {/* Fake input with typing animation */}
           <div className="mt-10 max-w-2xl mx-auto">
-            <div className="relative bg-white/[0.03] border border-white/10 rounded-2xl px-5 py-4 flex items-center gap-3 hover:border-indigo-500/30 transition group">
-              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-600 shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <div className="flex-1 text-left text-lg">
+            <div className="relative bg-white/[0.03] border border-white/10 rounded-2xl px-4 md:px-5 py-3 md:py-4 flex items-center gap-3 hover:border-indigo-500/30 transition group">
+              <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-600 shrink-0 hidden sm:block"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <div className="flex-1 text-left text-base md:text-lg min-w-0 truncate">
                 <TypingHero />
               </div>
-              <Link href="/login?tab=register" className="px-5 py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition text-sm shrink-0">
+              <Link href="/login?tab=register" className="px-4 md:px-5 py-2 md:py-2.5 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition text-sm shrink-0">
                 Generate
               </Link>
             </div>
             <div className="mt-4 flex flex-wrap gap-2 justify-center">
-              {EXAMPLES.slice(0, 4).map(s => (
+              {EXAMPLES.slice(0, 3).map(s => (
                 <Link key={s} href="/login?tab=register"
-                  className="px-3 py-1.5 text-xs text-slate-600 bg-white/[0.02] border border-white/5 rounded-lg hover:bg-white/[0.05] hover:text-slate-400 transition">
+                  className="px-3 py-1.5 text-xs text-slate-600 bg-white/[0.02] border border-white/5 rounded-lg hover:bg-white/[0.05] hover:text-slate-400 transition truncate max-w-[200px] md:max-w-none">
                   {s}
                 </Link>
               ))}

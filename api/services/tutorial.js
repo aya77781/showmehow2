@@ -77,6 +77,8 @@ async function elevenLabsTTS(text, outputPath) {
   throw new Error('All ElevenLabs keys exhausted');
 }
 
+const SKIP_AVATAR = process.env.SKIP_AVATAR === 'true';
+
 const OUT_DIR = path.resolve(__dirname, '..', 'output', 'sessions');
 const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
 
@@ -677,13 +679,6 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   const intro = tutorial.intro || `Welcome to this tutorial.`;
   const outro = tutorial.outro || `That's it, you're done!`;
 
-  // 1. Avatar
-  emit('avatar:start', {});
-  const avatarPath = await getOrCreateAvatar();
-  const avatarUrl = await uploadToFal(avatarPath, 'image/png');
-  emit('avatar:done', { reused: true });
-
-  // 2. TTS → VEED → Composite — pipelined per narration (each starts VEED as soon as its TTS is ready)
   const narrations = [
     { text: intro, id: 'intro' },
     ...steps.map((s, i) => ({ text: s.description || s.title, id: `step-${i + 1}` })),
@@ -694,50 +689,106 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   emit('tts:start', { total: narrations.length });
   emit('video:start', { total: narrations.length });
 
-  // Each narration runs its full pipeline independently: TTS → VEED → Composite
-  const pipelineResults = await Promise.all(
-    narrations.map(async (n, i) => {
-      // TTS
-      let ttsFile;
-      try {
-        ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));
-        emit('tts:done', { id: n.id });
-      } catch (err) {
-        emit('tts:error', { id: n.id, error: err.message });
-        return null;
-      }
+  let pipelineResults;
 
-      // VEED talking clip (starts immediately after this narration's TTS)
-      let avatarClipFile;
-      try {
-        avatarClipFile = await generateTalkingClip(avatarUrl, ttsFile, path.join(vidDir, `avatar-${n.id}.mp4`), emit, n.id);
-      } catch (err) {
-        emit('video:clip:error', { label: n.id, error: err.message });
-        return null;
-      }
+  if (SKIP_AVATAR) {
+    // ── DEV MODE: TTS + screenshot slideshow (no avatar, no VEED, no fal video calls) ──
+    emit('avatar:start', {});
+    emit('avatar:done', { skipped: true });
+    console.log('[DEV] SKIP_AVATAR=true — generating slideshow clips (no VEED/avatar)');
 
-      // Composite: screenshot bg + avatar PiP
-      const compositeFile = path.join(vidDir, `${n.id}.mp4`);
-      let bgImage = null;
-      if (n.id === 'intro') bgImage = steps[0]?.screenshot ? path.join(imgDir, steps[0].screenshot) : null;
-      else if (n.id === 'outro') bgImage = steps[steps.length - 1]?.screenshot ? path.join(imgDir, steps[steps.length - 1].screenshot) : null;
-      else {
-        const idx = parseInt(n.id.split('-')[1]) - 1;
-        bgImage = steps[idx]?.screenshot ? path.join(imgDir, steps[idx].screenshot) : null;
-      }
-
-      if (bgImage && fs.existsSync(bgImage)) {
+    pipelineResults = await Promise.all(
+      narrations.map(async (n) => {
+        // TTS only
+        let ttsFile;
         try {
-          await compositeClipAsync(bgImage, avatarClipFile, compositeFile);
-          emit('video:composite:done', { label: n.id });
-          return compositeFile;
-        } catch {
-          return avatarClipFile;
+          ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));
+          emit('tts:done', { id: n.id });
+        } catch (err) {
+          emit('tts:error', { id: n.id, error: err.message });
+          return null;
         }
-      }
-      return avatarClipFile;
-    })
-  );
+
+        // Simple slideshow: screenshot + audio → mp4 with ffmpeg
+        let bgImage = null;
+        if (n.id === 'intro') bgImage = steps[0]?.screenshot ? path.join(imgDir, steps[0].screenshot) : null;
+        else if (n.id === 'outro') bgImage = steps[steps.length - 1]?.screenshot ? path.join(imgDir, steps[steps.length - 1].screenshot) : null;
+        else {
+          const idx = parseInt(n.id.split('-')[1]) - 1;
+          bgImage = steps[idx]?.screenshot ? path.join(imgDir, steps[idx].screenshot) : null;
+        }
+
+        const clipFile = path.join(vidDir, `${n.id}.mp4`);
+
+        if (bgImage && fs.existsSync(bgImage)) {
+          try {
+            await execAsync(
+              `ffmpeg -y -loop 1 -i "${bgImage}" -i "${ttsFile}" ` +
+              `-filter_complex "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[v]" ` +
+              `-map "[v]" -map 1:a -c:v libx264 -c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart -shortest "${clipFile}"`,
+              { timeout: 30000 }
+            );
+            emit('video:clip:done', { label: n.id, file: path.basename(clipFile), size: fs.statSync(clipFile).size });
+            return clipFile;
+          } catch (err) {
+            emit('video:clip:error', { label: n.id, error: err.message });
+            return null;
+          }
+        }
+        return null;
+      })
+    );
+  } else {
+    // ── PRODUCTION: Full pipeline with avatar + VEED ──
+    emit('avatar:start', {});
+    const avatarPath = await getOrCreateAvatar();
+    const avatarUrl = await uploadToFal(avatarPath, 'image/png');
+    emit('avatar:done', { reused: true });
+
+    pipelineResults = await Promise.all(
+      narrations.map(async (n) => {
+        // TTS
+        let ttsFile;
+        try {
+          ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));
+          emit('tts:done', { id: n.id });
+        } catch (err) {
+          emit('tts:error', { id: n.id, error: err.message });
+          return null;
+        }
+
+        // VEED talking clip
+        let avatarClipFile;
+        try {
+          avatarClipFile = await generateTalkingClip(avatarUrl, ttsFile, path.join(vidDir, `avatar-${n.id}.mp4`), emit, n.id);
+        } catch (err) {
+          emit('video:clip:error', { label: n.id, error: err.message });
+          return null;
+        }
+
+        // Composite: screenshot bg + avatar PiP
+        const compositeFile = path.join(vidDir, `${n.id}.mp4`);
+        let bgImage = null;
+        if (n.id === 'intro') bgImage = steps[0]?.screenshot ? path.join(imgDir, steps[0].screenshot) : null;
+        else if (n.id === 'outro') bgImage = steps[steps.length - 1]?.screenshot ? path.join(imgDir, steps[steps.length - 1].screenshot) : null;
+        else {
+          const idx = parseInt(n.id.split('-')[1]) - 1;
+          bgImage = steps[idx]?.screenshot ? path.join(imgDir, steps[idx].screenshot) : null;
+        }
+
+        if (bgImage && fs.existsSync(bgImage)) {
+          try {
+            await compositeClipAsync(bgImage, avatarClipFile, compositeFile);
+            emit('video:composite:done', { label: n.id });
+            return compositeFile;
+          } catch {
+            return avatarClipFile;
+          }
+        }
+        return avatarClipFile;
+      })
+    );
+  }
 
   const compositeClips = pipelineResults.filter(Boolean);
   emit('tts:complete', { success: compositeClips.length, time: Date.now() - t0 });

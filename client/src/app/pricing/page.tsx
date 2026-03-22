@@ -91,8 +91,8 @@ function PricingInner() {
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
-          <a href="/dashboard" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <a href="/dashboard" className="text-lg sm:text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
               {userPlan?.isPro && (
@@ -106,10 +106,10 @@ function PricingInner() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-3">Simple pricing</h1>
-          <p className="text-slate-400 text-lg max-w-xl mx-auto">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-3xl sm:text-4xl font-bold mb-3">Simple pricing</h1>
+          <p className="text-slate-400 text-base sm:text-lg max-w-xl mx-auto">
             Generate AI video tutorials with real screenshots and avatar narration. Pay per video or go unlimited.
           </p>
         </div>

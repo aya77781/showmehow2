@@ -85,19 +85,19 @@ function ExploreInner() {
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <a href="/" className="text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
-          <div className="flex items-center gap-3">
-            <a href="/pricing" className="text-sm text-slate-400 hover:text-white transition">Pricing</a>
-            <a href="/login" className="px-3 py-1.5 text-sm bg-indigo-500 rounded-lg hover:bg-indigo-400 transition font-medium">Sign In</a>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <a href="/" className="text-lg sm:text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <a href="/pricing" className="text-xs sm:text-sm text-slate-400 hover:text-white transition">Pricing</a>
+            <a href="/login" className="px-3 py-1.5 text-xs sm:text-sm bg-indigo-500 rounded-lg hover:bg-indigo-400 transition font-medium">Sign In</a>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Hero */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Explore Tutorials</h1>
+        <div className="text-center mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Explore Tutorials</h1>
           <p className="text-slate-500 text-sm">AI-generated video tutorials on any topic. Watch, learn, share.</p>
         </div>
 
@@ -139,7 +139,7 @@ function ExploreInner() {
         </div>
 
         {/* Sort + count */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
           <p className="text-slate-500 text-sm">{total} tutorial{total !== 1 ? "s" : ""}</p>
           <div className="flex gap-1">
             {[

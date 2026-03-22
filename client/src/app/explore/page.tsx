@@ -185,52 +185,59 @@ function ExploreInner() {
               <a
                 key={t.slug}
                 href={`/tutorial/${t.slug}`}
-                className="group bg-white/[0.02] border border-white/5 rounded-2xl overflow-hidden hover:border-white/15 transition"
+                className="group block bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden hover:border-indigo-500/30 hover:bg-white/[0.05] transition-all duration-200 shadow-sm shadow-black/20"
               >
                 {/* Thumbnail */}
-                <div className="aspect-video bg-slate-900 relative overflow-hidden">
+                <div className="aspect-video bg-slate-900/80 relative overflow-hidden">
                   {t.thumbnail && t.sessionId ? (
                     <img
                       src={`${API}${t.thumbnail}`}
                       alt={t.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-700">
                       <svg width="40" height="40" fill="none" stroke="currentColor" strokeWidth="1" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     </div>
                   )}
-                  <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 rounded text-[10px] text-white font-medium">
+                  {/* Play overlay on hover */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+                    <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                      <svg width="16" height="16" fill="white" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] text-white font-medium">
                     {t.steps} steps
                   </div>
                 </div>
 
                 {/* Info */}
                 <div className="p-4">
-                  <h3 className="text-sm font-bold text-white mb-1 line-clamp-2 group-hover:text-indigo-400 transition">{t.title}</h3>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-600 mb-2">
+                  <h3 className="text-sm font-bold text-white mb-1.5 line-clamp-2 group-hover:text-indigo-400 transition leading-snug">{t.title}</h3>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-3">
                     <span className="capitalize">{t.category}</span>
-                    <span>&middot;</span>
+                    <span className="text-slate-700">&middot;</span>
                     <span>{ago(t.createdAt)}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       {t.author.picture ? (
-                        <img src={t.author.picture} alt="" className="w-4 h-4 rounded-full" referrerPolicy="no-referrer" />
+                        <img src={t.author.picture} alt="" className="w-5 h-5 rounded-full ring-1 ring-white/10" referrerPolicy="no-referrer" />
                       ) : (
-                        <div className="w-4 h-4 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-[8px] font-bold">
+                        <div className="w-5 h-5 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-[9px] font-bold">
                           {t.author.name?.[0]?.toUpperCase()}
                         </div>
                       )}
-                      <span className="text-[11px] text-slate-600">{t.author.name}</span>
+                      <span className="text-[11px] text-slate-500">{t.author.name}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-[11px] text-slate-700">
-                      <span className="flex items-center gap-0.5">
-                        <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-600">
+                      <span className="flex items-center gap-1">
+                        <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         {t.views}
                       </span>
-                      <span className="flex items-center gap-0.5">
-                        <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                      <span className="flex items-center gap-1">
+                        <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
                         {t.likes}
                       </span>
                     </div>

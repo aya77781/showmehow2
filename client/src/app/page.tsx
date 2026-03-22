@@ -94,16 +94,18 @@ const CAT_LABELS: Record<string, string> = {
 
 // ── Types ──────────────────────────────────────────────────
 interface PublicTutorial {
-  _id: string;
   slug: string;
   topic: string;
+  title: string;
   category: string;
   tags: string[];
   views: number;
   likes: number;
+  steps: number;
   sessionId?: string;
-  tutorial?: { title?: string; steps?: { step: number }[] };
-  user?: { name: string; picture?: string };
+  thumbnail?: string | null;
+  author?: { name: string; picture?: string };
+  createdAt: string;
 }
 
 // ── Main Landing ───────────────────────────────────────────
@@ -121,7 +123,7 @@ export default function Landing() {
   useEffect(() => {
     fetch(`${API}/api/explore?limit=6&sort=recent`)
       .then(r => r.json())
-      .then(data => { if (Array.isArray(data.tutorials)) setTutorials(data.tutorials); })
+      .then(data => { if (Array.isArray(data.items)) setTutorials(data.items); })
       .catch(() => {});
   }, []);
 
@@ -347,14 +349,14 @@ export default function Landing() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
               {tutorials.map((t) => (
-                <Link key={t._id} href={`/tutorial/${t.slug}`}
+                <Link key={t.slug} href={`/tutorial/${t.slug}`}
                   className="group rounded-2xl overflow-hidden border border-white/5 hover:border-white/10 bg-white/[0.02] transition cursor-pointer block">
                   {/* Thumbnail — real screenshot from session */}
                   <div className="relative aspect-video bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center overflow-hidden">
-                    {t.sessionId && t.tutorial?.steps?.[0] ? (
+                    {t.thumbnail && t.sessionId ? (
                       <img
-                        src={`${API}/output/sessions/${t.sessionId}/images/step-01.png`}
-                        alt={t.tutorial?.title || t.topic}
+                        src={`${API}${t.thumbnail}`}
+                        alt={t.title || t.topic}
                         className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-300"
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
@@ -367,17 +369,22 @@ export default function Landing() {
                     </div>
                     {/* Steps count */}
                     <span className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 rounded text-[10px] text-white font-mono backdrop-blur-sm">
-                      {t.tutorial?.steps?.length || 0} steps
+                      {t.steps} steps
                     </span>
                     {/* Avatar PiP */}
-                    <div className="absolute bottom-2 left-2 w-8 h-8 rounded-lg bg-slate-800/80 border border-white/10 flex items-center justify-center text-slate-400">
-                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    </div>
+                    {t.author?.picture ? (
+                      <img src={t.author.picture} alt="" referrerPolicy="no-referrer"
+                        className="absolute bottom-2 left-2 w-8 h-8 rounded-lg border border-white/10 object-cover" />
+                    ) : (
+                      <div className="absolute bottom-2 left-2 w-8 h-8 rounded-lg bg-slate-800/80 border border-white/10 flex items-center justify-center text-indigo-400 text-[10px] font-bold">
+                        {t.author?.name?.[0]?.toUpperCase() || "?"}
+                      </div>
+                    )}
                   </div>
                   {/* Info */}
                   <div className="p-4">
                     <p className="text-sm font-semibold text-white group-hover:text-indigo-300 transition truncate">
-                      {t.tutorial?.title || t.topic}
+                      {t.title || t.topic}
                     </p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${CATEGORIES[t.category] || CATEGORIES.other}`}>

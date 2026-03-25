@@ -586,29 +586,36 @@ function Dashboard() {
                   className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 text-white text-base md:text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
                 />
                 <div className="flex items-center gap-3 sm:float-right">
-                  {planStatus && !planStatus.isPro && (
+                  {planStatus && !planStatus.isPro && planStatus.canGenerate && (
                     <span className="text-xs text-slate-500">
-                      {planStatus.credits > 0
-                        ? `${planStatus.credits} video${planStatus.credits !== 1 ? "s" : ""} left`
-                        : "No credits left"}
+                      {planStatus.credits} video{planStatus.credits !== 1 ? "s" : ""} left
                     </span>
                   )}
                   {planStatus?.isPro && <span className="text-xs text-indigo-400">Pro — Unlimited</span>}
-                  <button
-                    onClick={handleGenerate}
-                    disabled={!topic.trim() || (planStatus !== null && !planStatus.canGenerate)}
-                    className="px-5 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
-                  >
-                    Generate
-                  </button>
+                  {planStatus && !planStatus.canGenerate ? (
+                    <a
+                      href="/pricing"
+                      className="px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold rounded-xl hover:from-amber-400 hover:to-orange-400 transition text-sm flex items-center gap-2"
+                    >
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                      Upgrade to generate more
+                    </a>
+                  ) : (
+                    <button
+                      onClick={handleGenerate}
+                      disabled={!topic.trim()}
+                      className="px-5 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
+                    >
+                      Generate
+                    </button>
+                  )}
                 </div>
                 <div className="clear-both" />
               </div>
 
               {planStatus && !planStatus.canGenerate && (
-                <div className="mt-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm flex items-center gap-2">
-                  <span>You&apos;ve used all your free videos.</span>
-                  <a href="/pricing" className="underline font-medium hover:text-amber-300">Upgrade your plan</a>
+                <div className="mt-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm text-center">
+                  You&apos;ve used your 3 free videos. <a href="/pricing" className="underline font-medium hover:text-amber-300">See plans &rarr;</a>
                 </div>
               )}
 

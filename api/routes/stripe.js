@@ -27,7 +27,7 @@ router.post('/setup', async (req, res) => {
     } else {
       const singleProduct = singleExists || await stripe.products.create({
         name: 'ShowMe AI — Single Tutorial',
-        description: 'Generate one AI video tutorial with real screenshots and avatar narration',
+        description: 'Generate one AI video tutorial with real screenshots and narration',
       });
       const singlePrice = await stripe.prices.create({
         product: singleProduct.id,

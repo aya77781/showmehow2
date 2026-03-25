@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import api from "@/lib/api";
 
@@ -85,10 +85,21 @@ function ChatContent({ text, onStepClick }: { text: string; onStepClick: (step: 
 }
 
 // ── Component ───────────────────────────────────────────────
-export default function Dashboard() {
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [paymentToast, setPaymentToast] = useState<{ plan: string } | null>(null);
 
   // Data
   const [projects, setProjects] = useState<Project[]>([]);
@@ -142,6 +153,25 @@ export default function Dashboard() {
     catch {} finally { setLoadingProjects(false); }
   }, [token]);
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  // ── Onboarding: show for new users with 0 projects ──────
+  useEffect(() => {
+    if (!loadingProjects && projects.length === 0 && user) {
+      const seen = localStorage.getItem("onboarding_seen");
+      if (!seen) setShowOnboarding(true);
+    }
+  }, [loadingProjects, projects.length, user]);
+
+  // ── Payment toast: show when returning from Stripe ───────
+  useEffect(() => {
+    const payment = searchParams.get("payment");
+    const plan = searchParams.get("plan");
+    if (payment === "success" && plan) {
+      setPaymentToast({ plan });
+      window.history.replaceState({}, "", "/dashboard");
+      setTimeout(() => setPaymentToast(null), 6000);
+    }
+  }, [searchParams]);
 
   // ── Log helpers ───────────────────────────────────────────
   const addLog = (text: string, status: "done" | "active" = "done") => {
@@ -404,6 +434,65 @@ export default function Dashboard() {
   // ── Render ────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+
+      {/* ── Payment success toast ──────────────────────────── */}
+      {paymentToast && (
+        <div className="fixed top-4 right-4 z-[100] animate-in slide-in-from-top-2 fade-in duration-300">
+          <div className="flex items-center gap-3 px-5 py-3 bg-green-500/10 border border-green-500/20 backdrop-blur-xl rounded-xl shadow-lg">
+            <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+              <svg width="16" height="16" fill="none" stroke="#22c55e" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div>
+              <p className="text-green-400 text-sm font-semibold">Payment successful!</p>
+              <p className="text-green-400/60 text-xs">
+                {paymentToast.plan === "pro" ? "Pro plan activated — unlimited tutorials" : "1 credit added — generate your tutorial now"}
+              </p>
+            </div>
+            <button onClick={() => setPaymentToast(null)} className="text-green-400/40 hover:text-green-400 ml-2">
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Onboarding modal ───────────────────────────────── */}
+      {showOnboarding && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-8 relative">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 mb-4">
+                <svg width="24" height="24" fill="none" stroke="#818cf8" strokeWidth="1.5" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </div>
+              <h2 className="text-2xl font-bold">Welcome to ShowMeHow.ai</h2>
+              <p className="text-slate-400 text-sm mt-2">Create AI video tutorials in 3 simple steps</p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              {[
+                { num: "1", title: "Type any topic", desc: "\"How to deploy on Vercel\", \"How to create a GitHub repo\"... anything." },
+                { num: "2", title: "AI researches & builds", desc: "Claude writes the script, finds real screenshots, and validates every image." },
+                { num: "3", title: "Get your video", desc: "An AI avatar narrates your tutorial. Download, share, or publish it." },
+              ].map((s) => (
+                <div key={s.num} className="flex items-start gap-4">
+                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-bold shrink-0">{s.num}</div>
+                  <div>
+                    <p className="text-white text-sm font-semibold">{s.title}</p>
+                    <p className="text-slate-500 text-xs mt-0.5">{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={() => { setShowOnboarding(false); localStorage.setItem("onboarding_seen", "1"); inputRef.current?.focus(); }}
+              className="w-full py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition text-sm"
+            >
+              Start creating
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ────────────────────────────────────────── */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
         <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">

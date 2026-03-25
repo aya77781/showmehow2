@@ -14,7 +14,6 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "@fal-ai/client": "^1.9.4",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",

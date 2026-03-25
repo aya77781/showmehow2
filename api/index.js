@@ -51,13 +51,10 @@ console.log('[Config]', {
   API_URL: process.env.API_URL || `http://localhost:${PORT}`,
   MONGO_URI: process.env.MONGO_URI ? '✓ set' : '✗ MISSING',
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '✓ set' : '✗ MISSING',
-  FAL_KEY: process.env.FAL_KEY ? '✓ set' : '✗ MISSING',
-  FAL_KEY_BACKUP: process.env.FAL_KEY_BACKUP ? '✓ set' : '✗ MISSING',
   ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY ? '✓ set' : '✗ MISSING',
   ELEVENLABS_API_KEY_BACKUP: process.env.ELEVENLABS_API_KEY_BACKUP ? '✓ set' : '✗ MISSING',
   SERPER_API_KEY: process.env.SERPER_API_KEY ? '✓ set' : '✗ MISSING',
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY ? '✓ set' : '✗ MISSING',
-  SKIP_AVATAR: process.env.SKIP_AVATAR || 'false',
 });
 
 server.listen(PORT, () => {

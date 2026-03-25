@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema(
       enum: ['free', 'single', 'pro'],
       default: 'free',
     },
-    credits: { type: Number, default: 0 }, // single-use credits
+    credits: { type: Number, default: 3 }, // free users start with 3
     stripeSubscriptionId: { type: String, default: null },
     planExpiresAt: { type: Date, default: null },
   },

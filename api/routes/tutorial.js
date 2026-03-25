@@ -29,10 +29,26 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // POST /api/tutorials — create project (just saves topic, socket handles generation)
+// Validates user has credits (free: 3, single: purchased, pro: unlimited)
 router.post('/', auth, async (req, res) => {
   try {
     const { topic } = req.body;
     if (!topic?.trim()) return res.status(400).json({ error: 'Topic is required' });
+
+    const User = require('../models/User');
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isPro = user.plan === 'pro' && user.planExpiresAt && user.planExpiresAt > new Date();
+    if (!isPro && user.credits <= 0) {
+      return res.status(403).json({ error: 'No credits left. Upgrade your plan to generate more videos.' });
+    }
+
+    // Deduct credit (pro users don't spend credits)
+    if (!isPro) {
+      user.credits -= 1;
+      await user.save();
+    }
 
     const project = await Project.create({
       user: req.user.id,

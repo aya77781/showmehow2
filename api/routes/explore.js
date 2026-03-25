@@ -143,6 +143,7 @@ router.post('/:slug/like', async (req, res) => {
 });
 
 // PUT /api/explore/:id/visibility — toggle public/private (auth required)
+// Only paid users (single with credits or pro) can make videos private
 router.put('/:id/visibility', auth, async (req, res) => {
   try {
     const { isPublic, category, tags } = req.body;
@@ -150,6 +151,17 @@ router.put('/:id/visibility', auth, async (req, res) => {
     const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
     if (!project) return res.status(404).json({ error: 'Project not found' });
     if (project.status !== 'complete') return res.status(400).json({ error: 'Only completed tutorials can be published' });
+
+    // Check if user can make video private (paid users only)
+    if (!isPublic) {
+      const User = require('../models/User');
+      const user = await User.findById(req.user.id);
+      const isPro = user.plan === 'pro' && user.planExpiresAt && user.planExpiresAt > new Date();
+      const isPaid = isPro || user.plan === 'single';
+      if (!isPaid) {
+        return res.status(403).json({ error: 'Upgrade to a paid plan to make videos private. Free videos are always public for SEO.' });
+      }
+    }
 
     project.isPublic = !!isPublic;
     if (category && validCategories.includes(category)) project.category = category;

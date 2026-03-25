@@ -37,7 +37,7 @@ const projectSchema = new mongoose.Schema({
     totalTime: Number,
   },
   error: String,
-  isPublic: { type: Boolean, default: false },
+  isPublic: { type: Boolean, default: true },
   slug: { type: String, unique: true, sparse: true },
   category: { type: String, default: 'other' },
   tags: [String],
@@ -45,16 +45,18 @@ const projectSchema = new mongoose.Schema({
   likes: { type: Number, default: 0 },
 }, { timestamps: true });
 
-// Auto-generate slug from topic
+// Auto-generate SEO-friendly slug from topic (always, since videos are public by default)
 projectSchema.pre('save', function () {
-  if (this.isModified('isPublic') && this.isPublic && !this.slug) {
-    this.slug = this.topic
+  if (!this.slug && this.topic) {
+    const base = this.topic
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
-      .slice(0, 80)
-      + '-' + this._id.toString().slice(-6);
+      .slice(0, 70);
+    // Prefix with "video-tutorial-" for SEO discoverability
+    const prefix = base.startsWith('how-to') ? '' : 'video-tutorial-';
+    this.slug = prefix + base + '-' + this._id.toString().slice(-6);
   }
 });
 

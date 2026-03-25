@@ -103,12 +103,15 @@ router.get('/status', auth, async (req, res) => {
 
     const isPro = user.plan === 'pro' && user.planExpiresAt && user.planExpiresAt > new Date();
     const canGenerate = isPro || user.credits > 0;
+    const isPaid = isPro || user.plan === 'single';
 
     res.json({
-      plan: isPro ? 'pro' : (user.credits > 0 ? 'single' : 'free'),
+      plan: isPro ? 'pro' : (user.plan === 'single' ? 'single' : 'free'),
       credits: user.credits,
       isPro,
+      isPaid,
       canGenerate,
+      canMakePrivate: isPaid,
       planExpiresAt: user.planExpiresAt,
     });
   } catch (err) {

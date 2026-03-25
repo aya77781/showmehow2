@@ -129,11 +129,14 @@ function Dashboard() {
 
   // Publish controls
   const [publishOpen, setPublishOpen] = useState(false);
-  const [pubPublic, setPubPublic] = useState(false);
+  const [pubPublic, setPubPublic] = useState(true);
   const [pubCategory, setPubCategory] = useState("dev");
   const [pubTags, setPubTags] = useState("");
   const [pubSaving, setPubSaving] = useState(false);
   const [pubSlug, setPubSlug] = useState<string | null>(null);
+
+  // Plan status
+  const [planStatus, setPlanStatus] = useState<{ plan: string; credits: number; isPro: boolean; isPaid: boolean; canGenerate: boolean; canMakePrivate: boolean } | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -153,6 +156,14 @@ function Dashboard() {
     catch {} finally { setLoadingProjects(false); }
   }, [token]);
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  // ── Fetch plan status ──────────────────────────────────────
+  const fetchPlanStatus = useCallback(async () => {
+    if (!token) return;
+    try { const { data } = await api.get("/api/stripe/status"); setPlanStatus(data); }
+    catch {}
+  }, [token]);
+  useEffect(() => { fetchPlanStatus(); }, [fetchPlanStatus]);
 
   // ── Onboarding: show for new users with 0 projects ──────
   useEffect(() => {
@@ -323,11 +334,13 @@ function Dashboard() {
   // ── Actions ───────────────────────────────────────────────
   const handleGenerate = async () => {
     if (!topic.trim() || !token) return;
+    if (planStatus && !planStatus.canGenerate) return;
     reset(); setPhase("researching");
     try {
       const { data: project } = await api.post("/api/tutorials", { topic });
       setCurrent(project);
       addLog("Project created");
+      fetchPlanStatus(); // refresh credits count
       socketRef.current?.emit("tutorial:research", { projectId: project._id });
     } catch (err: any) {
       setError(err.response?.data?.error || err.message);
@@ -350,7 +363,7 @@ function Dashboard() {
         setPhase("complete");
         setActiveStep(0);
         // Init publish state from project
-        setPubPublic(!!data.isPublic);
+        setPubPublic(data.isPublic !== false);
         setPubCategory(data.category || "dev");
         setPubTags((data.tags || []).join(", "));
         setPubSlug(data.slug || null);
@@ -419,7 +432,7 @@ function Dashboard() {
     setVideoProgress({}); setError(""); setStats(null); setActiveStep(0); setFinalVideo(null); setViewTab("video");
     setSessionId("");
     setChatMessages([]); setChatInput(""); setChatLoading(false); setChatOpen(false);
-    setPublishOpen(false); setPubPublic(false); setPubCategory("dev"); setPubTags(""); setPubSaving(false); setPubSlug(null);
+    setPublishOpen(false); setPubPublic(true); setPubCategory("dev"); setPubTags(""); setPubSaving(false); setPubSlug(null);
   };
 
   const handleLogout = () => { localStorage.clear(); router.push("/"); };
@@ -572,15 +585,32 @@ function Dashboard() {
                   placeholder="e.g. How to deploy a Next.js app on Vercel"
                   className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 text-white text-base md:text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
                 />
-                <button
-                  onClick={handleGenerate}
-                  disabled={!topic.trim()}
-                  className="w-full sm:w-auto sm:float-right px-5 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
-                >
-                  Generate
-                </button>
+                <div className="flex items-center gap-3 sm:float-right">
+                  {planStatus && !planStatus.isPro && (
+                    <span className="text-xs text-slate-500">
+                      {planStatus.credits > 0
+                        ? `${planStatus.credits} video${planStatus.credits !== 1 ? "s" : ""} left`
+                        : "No credits left"}
+                    </span>
+                  )}
+                  {planStatus?.isPro && <span className="text-xs text-indigo-400">Pro — Unlimited</span>}
+                  <button
+                    onClick={handleGenerate}
+                    disabled={!topic.trim() || (planStatus !== null && !planStatus.canGenerate)}
+                    className="px-5 py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-20 disabled:cursor-not-allowed text-sm"
+                  >
+                    Generate
+                  </button>
+                </div>
                 <div className="clear-both" />
               </div>
+
+              {planStatus && !planStatus.canGenerate && (
+                <div className="mt-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm flex items-center gap-2">
+                  <span>You&apos;ve used all your free videos.</span>
+                  <a href="/pricing" className="underline font-medium hover:text-amber-300">Upgrade your plan</a>
+                </div>
+              )}
 
               {error && <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2"><span>✕</span>{error}</div>}
 
@@ -750,13 +780,20 @@ function Dashboard() {
                   {/* Toggle */}
                   <div className="flex items-center gap-3 mb-4">
                     <button
-                      onClick={() => setPubPublic(!pubPublic)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${pubPublic ? "bg-green-500" : "bg-white/10"}`}
+                      onClick={() => { if (planStatus?.canMakePrivate) setPubPublic(!pubPublic); }}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${pubPublic ? "bg-green-500" : "bg-white/10"} ${!planStatus?.canMakePrivate ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       <span className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${pubPublic ? "translate-x-6" : "translate-x-1"}`} />
                     </button>
-                    <span className="text-sm text-slate-400">{pubPublic ? "Public — visible on Explore" : "Private — only you can see it"}</span>
+                    <span className="text-sm text-slate-400">
+                      {pubPublic ? "Public — visible on Explore & search engines" : "Private — only you can see it"}
+                    </span>
                   </div>
+                  {!planStatus?.canMakePrivate && (
+                    <p className="text-xs text-amber-400/80 mb-3">
+                      Free videos are always public for SEO. <a href="/pricing" className="underline hover:text-amber-300">Upgrade</a> to make videos private.
+                    </p>
+                  )}
 
                   {pubPublic && (
                     <div className="space-y-3">

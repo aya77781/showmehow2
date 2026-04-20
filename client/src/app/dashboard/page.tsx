@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import api from "@/lib/api";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
@@ -107,6 +108,7 @@ function Dashboard() {
 
   // Flow state
   const [topic, setTopic] = useState("");
+  const [source, setSource] = useState<"auto" | "wikihow" | "howtogeek" | "lifewire" | "digitalocean" | "freecodecamp" | "geeksforgeeks" | "devto">("auto");
   const [phase, setPhase] = useState<Phase>("idle");
   const [current, setCurrent] = useState<Project | null>(null);
   const [sessionId, setSessionId] = useState("");
@@ -144,9 +146,27 @@ function Dashboard() {
 
   // ── Auth ──────────────────────────────────────────────────
   useEffect(() => {
-    const s = localStorage.getItem("user"), t = localStorage.getItem("token");
-    if (!s || !t) { router.push("/login"); return; }
-    setUser(JSON.parse(s)); setToken(t);
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) {
+        router.push("/login");
+        return;
+      }
+      const u = data.session.user;
+      const meta = (u.user_metadata || {}) as { name?: string; full_name?: string; avatar_url?: string; picture?: string };
+      setUser({
+        name: meta.name || meta.full_name || (u.email || "").split("@")[0],
+        email: u.email || "",
+        picture: meta.avatar_url || meta.picture || null,
+      });
+      setToken(data.session.access_token);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) router.push("/login");
+      else setToken(session.access_token);
+    });
+    return () => listener.subscription.unsubscribe();
   }, [router]);
 
   // ── Fetch projects ────────────────────────────────────────
@@ -202,6 +222,48 @@ function Dashboard() {
       setSessionId(sid);
       addLog(`Research started — "${t}"`, "active");
     });
+
+    // ── Scraper events ──
+    const sourceLabel = (s: string) => ({
+      wikihow: "WikiHow", howtogeek: "HowToGeek", lifewire: "Lifewire",
+      makeuseof: "MakeUseOf", digitalocean: "DigitalOcean", freecodecamp: "freeCodeCamp",
+      geeksforgeeks: "GeeksForGeeks", devto: "dev.to", auto: "auto",
+    }[s] || s);
+    socket.on("scraper:source", ({ source: src }: { source: string }) => {
+      addLog(src === "auto" ? "Source: Auto (best match)" : `Source: ${sourceLabel(src)}`);
+    });
+    socket.on("scraper:start", () => {
+      finishLastLog();
+      addLog("Searching tutorial sources...", "active");
+    });
+    socket.on("scraper:searching", ({ site }: { site: string }) => {
+      addLog(`Searching ${sourceLabel(site)}...`, "active");
+    });
+    socket.on("scraper:article:found", ({ source: src, stepCount }: { source: string; stepCount: number }) => {
+      addLog(`Found tutorial on ${sourceLabel(src)} — ${stepCount} steps`);
+    });
+    socket.on("scraper:article:selected", ({ source: src, title, stepCount }: { source: string; title: string; stepCount: number }) => {
+      finishLastLog();
+      addLog(`Best article selected: "${title}" (${sourceLabel(src)}, ${stepCount} steps)`);
+    });
+    socket.on("scraper:images:downloading", ({ total }: { total: number }) => {
+      addLog(`Downloading ${total} screenshots...`, "active");
+    });
+    socket.on("scraper:images:done", ({ downloaded, failed }: { downloaded: number; failed: number }) => {
+      finishLastLog();
+      addLog(`Downloaded ${downloaded} screenshots${failed > 0 ? ` (${failed} failed)` : ""}`);
+    });
+    socket.on("scraper:done", ({ source: src, stepCount }: { source: string; stepCount: number }) => {
+      addLog(`Using ${stepCount} real screenshots from ${sourceLabel(src)}`);
+    });
+    socket.on("scraper:fallback:source", ({ requested, using }: { requested: string; using: string | null }) => {
+      if (using) addLog(`${sourceLabel(requested)} had no results — falling back to ${sourceLabel(using)}`);
+      else addLog(`No usable article on ${sourceLabel(requested)} — will try AI slides`);
+    });
+    socket.on("scraper:fallback", ({ reason }: { reason: string }) => {
+      addLog(`No article found (${reason}) — generating AI slides instead`);
+    });
+
     socket.on("research:claude:start", () => {
       finishLastLog();
       addLog("Claude generating tutorial script with web search...", "active");
@@ -337,7 +399,7 @@ function Dashboard() {
     if (planStatus && !planStatus.canGenerate) return;
     reset(); setPhase("researching");
     try {
-      const { data: project } = await api.post("/api/tutorials", { topic });
+      const { data: project } = await api.post("/api/tutorials", { topic, source });
       setCurrent(project);
       addLog("Project created");
       fetchPlanStatus(); // refresh credits count
@@ -435,7 +497,11 @@ function Dashboard() {
     setPublishOpen(false); setPubPublic(true); setPubCategory("dev"); setPubTags(""); setPubSaving(false); setPubSlug(null);
   };
 
-  const handleLogout = () => { localStorage.clear(); router.push("/"); };
+  const handleLogout = async () => {
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/");
+  };
 
   if (!user) return null;
 
@@ -585,6 +651,34 @@ function Dashboard() {
                   placeholder="e.g. How to deploy a Next.js app on Vercel"
                   className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 text-white text-base md:text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
                 />
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <span className="text-xs text-slate-500 self-center mr-1">Source:</span>
+                  {([
+                    { id: "auto", label: "🌐 Auto" },
+                    { id: "wikihow", label: "WikiHow" },
+                    { id: "howtogeek", label: "HowToGeek" },
+                    { id: "lifewire", label: "Lifewire" },
+                    { id: "digitalocean", label: "DigitalOcean" },
+                    { id: "freecodecamp", label: "freeCodeCamp" },
+                    { id: "geeksforgeeks", label: "GeeksForGeeks" },
+                    { id: "devto", label: "dev.to" },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setSource(opt.id)}
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition ${
+                        source === opt.id
+                          ? "bg-indigo-500/20 border-indigo-400/40 text-indigo-200"
+                          : "bg-white/[0.02] border-white/5 text-slate-400 hover:bg-white/[0.05] hover:text-slate-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="flex items-center gap-3 sm:float-right">
                   {planStatus && !planStatus.isPro && planStatus.canGenerate && (
                     <span className="text-xs text-slate-500">

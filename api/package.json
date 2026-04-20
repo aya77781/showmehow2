@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "migrate:data": "node scripts/migrate-data.js",
+    "migrate:data:dry": "node scripts/migrate-data.js --dry-run",
     "stripe:listen": "stripe listen --forward-to localhost:5000/api/webhook --events checkout.session.completed,invoice.paid,customer.subscription.deleted"
   },
   "keywords": [],
@@ -14,6 +16,7 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@supabase/supabase-js": "^2.103.3",
     "axios": "^1.13.6",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
@@ -22,15 +25,19 @@
     "express": "^5.2.1",
     "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.3.1",
+    "node-html-parser": "^7.1.0",
+    "openai": "^6.34.0",
     "playwright": "^1.58.2",
     "playwright-extra": "^4.3.6",
+    "puppeteer": "^24.40.0",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.34.5",
+    "slugify": "^1.6.9",
     "socket.io": "^4.8.3",
     "stripe": "^20.4.1"
   },
   "devDependencies": {
+    "mongoose": "^9.4.1",
     "nodemon": "^3.1.14"
   }
 }

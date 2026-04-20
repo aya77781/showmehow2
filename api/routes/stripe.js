@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const User = require('../models/User');
+const users = require('../db/users');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
@@ -12,7 +12,6 @@ router.post('/setup', async (req, res) => {
     const { webhookUrl } = req.body || {};
     const result = {};
 
-    // Check if products already exist
     const existingProducts = await stripe.products.list({ limit: 100 });
     const singleExists = existingProducts.data.find(p => p.name === 'ShowMe AI — Single Tutorial' && p.active);
     const proExists = existingProducts.data.find(p => p.name === 'ShowMe AI — Pro Monthly' && p.active);
@@ -51,7 +50,6 @@ router.post('/setup', async (req, res) => {
       result.products = 'Created';
     }
 
-    // Create webhook endpoint if production URL provided
     if (webhookUrl) {
       const webhookEvents = [
         'checkout.session.completed',
@@ -59,12 +57,10 @@ router.post('/setup', async (req, res) => {
         'customer.subscription.deleted',
       ];
 
-      // Check for existing webhook with same URL
       const existingWebhooks = await stripe.webhookEndpoints.list({ limit: 100 });
       const existing = existingWebhooks.data.find(wh => wh.url === webhookUrl && wh.status === 'enabled');
 
       if (existing) {
-        // Update events if needed
         await stripe.webhookEndpoints.update(existing.id, { enabled_events: webhookEvents });
         result.webhook = { id: existing.id, url: webhookUrl, status: 'Updated' };
         result.STRIPE_WEBHOOK_SECRET = '(use existing secret from .env)';
@@ -98,21 +94,22 @@ router.get('/prices', (req, res) => {
 // ── Get user plan status ───────────────────────────────────
 router.get('/status', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await users.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const isPro = user.plan === 'pro' && user.planExpiresAt && user.planExpiresAt > new Date();
-    const canGenerate = isPro || user.credits > 0;
+    const unlimited = users.hasUnlimitedAccess(user);
+    const isPro = unlimited || (user.plan === 'pro' && user.plan_expires_at && new Date(user.plan_expires_at) > new Date());
+    const canGenerate = unlimited || isPro || user.credits > 0;
     const isPaid = isPro || user.plan === 'single';
 
     res.json({
       plan: isPro ? 'pro' : (user.plan === 'single' ? 'single' : 'free'),
-      credits: user.credits,
+      credits: unlimited ? 9999 : user.credits,
       isPro,
       isPaid,
       canGenerate,
       canMakePrivate: isPaid,
-      planExpiresAt: user.planExpiresAt,
+      planExpiresAt: user.plan_expires_at,
     });
   } catch (err) {
     console.error('Stripe status error:', err);
@@ -126,19 +123,18 @@ router.post('/checkout', auth, async (req, res) => {
     const { plan } = req.body;
     if (plan !== 'single' && plan !== 'pro') return res.status(400).json({ error: 'Invalid plan' });
 
-    const user = await User.findById(req.user.id);
+    let user = await users.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    let customerId = user.stripeCustomerId;
+    let customerId = user.stripe_customer_id;
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
         name: user.name,
-        metadata: { userId: user._id.toString() },
+        metadata: { userId: user.id },
       });
       customerId = customer.id;
-      user.stripeCustomerId = customerId;
-      await user.save();
+      user = await users.update(user.id, { stripe_customer_id: customerId });
     }
 
     const priceId = plan === 'pro' ? process.env.STRIPE_PRICE_PRO : process.env.STRIPE_PRICE_SINGLE;
@@ -148,7 +144,7 @@ router.post('/checkout', auth, async (req, res) => {
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       mode,
-      metadata: { userId: user._id.toString(), plan },
+      metadata: { userId: user.id, plan },
       success_url: `${CLIENT_URL}/dashboard?payment=success&plan=${plan}`,
       cancel_url: `${CLIENT_URL}/pricing?payment=cancelled`,
     });
@@ -163,11 +159,11 @@ router.post('/checkout', auth, async (req, res) => {
 // ── Customer portal (manage subscription) ──────────────────
 router.post('/portal', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user?.stripeCustomerId) return res.status(400).json({ error: 'No subscription' });
+    const user = await users.findById(req.user.id);
+    if (!user?.stripe_customer_id) return res.status(400).json({ error: 'No subscription' });
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
+      customer: user.stripe_customer_id,
       return_url: `${CLIENT_URL}/dashboard`,
     });
 

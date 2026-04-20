@@ -1,6 +1,6 @@
 const crypto = require('crypto');
-const Cache = require('../models/Cache');
-const ImageLibrary = require('../models/ImageLibrary');
+const cacheDb = require('../db/cache');
+const imageLibrary = require('../db/imageLibrary');
 
 function normalize(text) {
   return (text || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^a-z0-9 ]/g, '');
@@ -19,31 +19,23 @@ function parseImageQuery(query) {
   const normalized = normalize(query);
   const words = normalized.split(' ').filter(w => w.length > 1);
 
-  // Remove noise words
   const noise = new Set(['screenshot', 'interface', 'ui', 'page', 'screen', '2024', '2025', '2026', 'the', 'and', 'for', 'with']);
   const meaningful = words.filter(w => !noise.has(w));
 
-  // First word is usually the site name
   const site = meaningful[0] || '';
   const tags = [...new Set(meaningful)];
-
-  // Try to extract page and element from the rest
   const rest = meaningful.slice(1).join(' ');
 
   return { site, tags, page: rest, element: '' };
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Cache layer (TTL-based, MongoDB)
+// Cache layer (TTL-based, Supabase)
 // ═══════════════════════════════════════════════════════════════
 
 async function cacheGet(type, key) {
   try {
-    const entry = await Cache.findOneAndUpdate(
-      { type, key },
-      { $inc: { hits: 1 } },
-      { returnDocument: 'after' },
-    );
+    const entry = await cacheDb.get(type, key);
     if (!entry) return null;
     console.log(`[cache] HIT ${type}:${key.slice(0, 40)} (${entry.hits} hits)`);
     return entry;
@@ -54,12 +46,7 @@ async function cacheGet(type, key) {
 
 async function cacheSet(type, key, value, buffer, ttlDays) {
   try {
-    const expiresAt = new Date(Date.now() + ttlDays * 86400000);
-    await Cache.findOneAndUpdate(
-      { type, key },
-      { type, key, value, buffer, expiresAt, hits: 0 },
-      { upsert: true },
-    );
+    await cacheDb.set(type, key, value, buffer, ttlDays);
     console.log(`[cache] SET ${type}:${key.slice(0, 40)} (TTL ${ttlDays}d)`);
   } catch (err) {
     console.warn(`[cache] SET failed: ${err.message}`);
@@ -67,31 +54,32 @@ async function cacheSet(type, key, value, buffer, ttlDays) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Image Library — persistent semantic image store
+// Image Library — persistent semantic image store (Supabase)
 // ═══════════════════════════════════════════════════════════════
 
 async function saveImage(buf, query, metadata = {}) {
   try {
     const hash = hashBuffer(buf);
     const parsed = parseImageQuery(query);
+    const mime = buf[0] === 0x89 ? 'image/png' : 'image/jpeg';
 
-    const existing = await ImageLibrary.findOne({ hash });
+    const existing = await imageLibrary.findByHash(hash);
     if (existing) {
-      // Merge new tags, bump usage
-      const merged = [...new Set([...existing.tags, ...parsed.tags, ...(metadata.tags || [])])];
-      existing.tags = merged;
-      existing.uses += 1;
-      existing.lastUsed = new Date();
-      if (metadata.annotationData) existing.annotationData = metadata.annotationData;
-      await existing.save();
-      console.log(`[imglib] UPDATE ${hash.slice(0, 12)} (${existing.uses} uses, ${merged.length} tags)`);
-      return existing;
+      const merged = [...new Set([...(existing.tags || []), ...parsed.tags, ...(metadata.tags || [])])];
+      const updated = await imageLibrary.update(existing.id, {
+        tags: merged,
+        uses: (existing.uses || 0) + 1,
+        last_used: new Date().toISOString(),
+        ...(metadata.annotationData ? { annotation_data: metadata.annotationData } : {}),
+      });
+      console.log(`[imglib] UPDATE ${hash.slice(0, 12)} (${updated.uses} uses, ${merged.length} tags)`);
+      return updated;
     }
 
-    const doc = await ImageLibrary.create({
+    const doc = await imageLibrary.create({
       hash,
       buffer: buf,
-      mime: buf[0] === 0x89 ? 'image/png' : 'image/jpeg',
+      mime,
       width: metadata.width || null,
       height: metadata.height || null,
       site: parsed.site,
@@ -115,28 +103,17 @@ async function findImages(query, limit = 5) {
     const parsed = parseImageQuery(query);
     if (!parsed.site) return [];
 
-    // Strategy 1: Same site + overlapping tags (best match)
-    const tagMatches = await ImageLibrary.find({
-      site: parsed.site,
-      validated: true,
-      tags: { $in: parsed.tags },
-    })
-      .sort({ uses: -1, lastUsed: -1 })
-      .limit(limit * 3) // fetch more, then rank
-      .lean();
-
+    const tagMatches = await imageLibrary.findBySiteAndTags(parsed.site, parsed.tags, limit * 3);
     if (tagMatches.length === 0) return [];
 
-    // Rank by tag overlap count
     const ranked = tagMatches.map(img => {
-      const overlap = img.tags.filter(t => parsed.tags.includes(t)).length;
+      const overlap = (img.tags || []).filter(t => parsed.tags.includes(t)).length;
       const score = overlap / Math.max(parsed.tags.length, 1);
       return { ...img, score };
     });
 
     ranked.sort((a, b) => b.score - a.score);
 
-    // Only return images with >= 40% tag overlap
     const good = ranked.filter(r => r.score >= 0.4).slice(0, limit);
 
     if (good.length > 0) {
@@ -150,10 +127,9 @@ async function findImages(query, limit = 5) {
   }
 }
 
-// Bump usage stats when an image is actually used
 async function markUsed(hash) {
   try {
-    await ImageLibrary.updateOne({ hash }, { $inc: { uses: 1 }, $set: { lastUsed: new Date() } });
+    await imageLibrary.incrementUses(hash);
   } catch { /* ignore */ }
 }
 

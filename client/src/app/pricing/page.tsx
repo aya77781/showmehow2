@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 const plans = [
   {
@@ -56,11 +57,14 @@ function PricingInner() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    setIsLoggedIn(!!token);
-    if (token) {
-      api.get("/api/stripe/status").then(({ data }) => setUserPlan(data)).catch(() => {});
-    }
+    const supabase = createSupabaseBrowserClient();
+    supabase.auth.getSession().then(({ data }) => {
+      const logged = !!data.session;
+      setIsLoggedIn(logged);
+      if (logged) {
+        api.get("/api/stripe/status").then(({ data }) => setUserPlan(data)).catch(() => {});
+      }
+    });
   }, []);
 
   const cancelled = searchParams.get("payment") === "cancelled";

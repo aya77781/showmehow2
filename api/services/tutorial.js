@@ -1,14 +1,58 @@
-const Anthropic = require('@anthropic-ai/sdk');
-const { execSync, exec } = require('child_process');
+const OpenAI = require('openai');
+const { execSync, exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+
+// Spawn-based ffmpeg runner so we pass args as an array (avoids Windows shell
+// escaping issues on paths with spaces/backslashes).
+function runFFmpeg(args, timeoutMs = 60000) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
+    const timer = timeoutMs ? setTimeout(() => {
+      try { proc.kill('SIGKILL'); } catch {}
+      reject(new Error(`ffmpeg timeout after ${timeoutMs}ms`));
+    }, timeoutMs) : null;
+    proc.on('error', (err) => { if (timer) clearTimeout(timer); reject(err); });
+    proc.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+      if (code === 0) return resolve();
+      reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-300)}`));
+    });
+  });
+}
+
+async function getAudioDuration(audioPath) {
+  return new Promise((resolve, reject) => {
+    const ffprobe = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      audioPath,
+    ]);
+    let output = '';
+    ffprobe.stdout.on('data', (d) => { output += d; });
+    ffprobe.on('error', reject);
+    ffprobe.on('close', (code) => {
+      if (code === 0) {
+        const v = parseFloat(output.trim());
+        if (Number.isFinite(v) && v > 0) return resolve(v);
+        return reject(new Error(`ffprobe returned invalid duration: ${output}`));
+      }
+      reject(new Error('ffprobe failed with code ' + code));
+    });
+  });
+}
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
-const { normalize, hashKey, hashBuffer, cacheGet, cacheSet, saveImage, findImages, markUsed } = require('./cache');
-const Project = require('../models/Project');
+const { normalize, hashKey, cacheGet, cacheSet } = require('./cache');
+const { generateAllSlides } = require('./slideGenerator');
+const { scrapeForTopic } = require('./scraper');
+const projects = require('../db/projects');
 
-const client = new Anthropic();
+const client = new OpenAI();
+const TEXT_MODEL = 'gpt-4o-mini';
 
 // ── ElevenLabs TTS ──
 const ELEVENLABS_KEYS = [process.env.ELEVENLABS_API_KEY, process.env.ELEVENLABS_API_KEY_BACKUP].filter(Boolean);
@@ -25,8 +69,13 @@ async function elevenLabsTTS(text, outputPath) {
         },
         body: JSON.stringify({
           text: cleanText,
-          model_id: 'eleven_multilingual_v2',
-          voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: {
+            stability: 0.75,
+            similarity_boost: 0.5,
+            style: 0.0,
+            use_speaker_boost: true,
+          },
         }),
       });
       if (!res.ok) {
@@ -47,31 +96,28 @@ async function elevenLabsTTS(text, outputPath) {
 const OUT_DIR = path.resolve(__dirname, '..', 'output', 'sessions');
 
 // ═══════════════════════════════════════════════════════════════
-// Claude → tutorial script (cached by normalized topic)
+// GPT → tutorial script (cached by normalized topic)
 // ═══════════════════════════════════════════════════════════════
 async function generateScript(topic) {
   const cacheKey = normalize(topic);
   const cached = await cacheGet('script', cacheKey);
   if (cached) return cached.value;
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+  const response = await client.chat.completions.create({
+    model: TEXT_MODEL,
     max_tokens: 2048,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+    response_format: { type: 'json_object' },
     messages: [{
       role: 'user',
       content: `You are a tutorial script writer for SHORT video tutorials. Create a step-by-step tutorial for: "${topic}"
 
 RULES:
-- Use web_search to find the real website/app for this topic
-- 8-12 steps — each step is ONE micro-action (click one button, fill one field, etc.)
+- Identify the real website/app/tool for this topic from your knowledge
+- 8-12 steps — each step is ONE micro-action (click one button, run one command, fill one field, etc.)
 - Each description must be EXACTLY 5-10 words — short enough for a 2-second voiceover
-- imageQuery must be ULTRA-SPECIFIC: "[SiteName] [exact page name] [exact UI element] screenshot 2025"
-  Example: "GitHub new repository page name input field screenshot 2025"
-  Example: "Gmail compose window subject line text field screenshot 2025"
-- ALWAYS include "2025" or "2024" in imageQuery to get the LATEST modern UI — never search for old designs
-- Every step MUST have a different imageQuery — never repeat the same query
-- Steps should show DIFFERENT screens/sections of the UI
+- Each step MUST include a "command" field (a short literal command, shell invocation, or UI action label)
+- Each step MUST include an "explanation" field (a 1-sentence rationale, 8-20 words)
+- Steps should show DIFFERENT actions / screens / sections
 
 Return ONLY valid JSON:
 {
@@ -84,16 +130,17 @@ Return ONLY valid JSON:
       "step": 1,
       "title": "Verb + Object (3-5 words)",
       "description": "Short voiceover, 5-10 words exactly.",
-      "imageQuery": "SiteName exact page exact element screenshot interface"
+      "command": "literal command or UI action",
+      "explanation": "Why this step matters in 1 sentence."
     }
   ]
 }`
     }]
   });
 
-  const text = response.content.find(b => b.type === 'text')?.text || '';
+  const text = response.choices[0].message.content || '';
   const i = text.indexOf('{'), j = text.lastIndexOf('}');
-  if (i === -1) throw new Error('No JSON from Claude');
+  if (i === -1) throw new Error('No JSON from model');
   const script = JSON.parse(text.slice(i, j + 1));
   const strip = s => s ? s.replace(/<[^>]+>/g, '').trim() : s;
   if (script.steps) script.steps.forEach(s => { s.description = strip(s.description); });
@@ -102,388 +149,6 @@ Return ONLY valid JSON:
 
   await cacheSet('script', cacheKey, script, null, 7);
   return script;
-}
-
-function detectMime(buf) {
-  if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png';
-  if (buf[0] === 0xFF && buf[1] === 0xD8) return 'image/jpeg';
-  if (buf[0] === 0x52 && buf[1] === 0x49) return 'image/webp';
-  if (buf[0] === 0x47 && buf[1] === 0x49) return 'image/gif';
-  return 'image/jpeg';
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Serper image search (cached by normalized query)
-// ═══════════════════════════════════════════════════════════════
-async function searchAndDownload(query, maxResults = 10) {
-  const cacheKey = normalize(query);
-  const cached = await cacheGet('image_search', cacheKey);
-  if (cached) return cached.value;
-
-  const res = await fetch('https://google.serper.dev/images', {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': process.env.SERPER_API_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ q: query, gl: 'us', hl: 'en', num: maxResults, tbs: 'qdr:y2' }),
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  const results = (data.images || []).slice(0, maxResults);
-
-  await cacheSet('image_search', cacheKey, results, null, 3);
-  return results;
-}
-
-async function downloadImages(images) {
-  const downloads = await Promise.allSettled(
-    images.map(img =>
-      fetch(img.imageUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(5000),
-      }).then(async r => {
-        if (!r.ok) throw new Error('not ok');
-        const buf = Buffer.from(await r.arrayBuffer());
-        if (buf.length < 5000) throw new Error('too small');
-        return buf;
-      })
-    )
-  );
-  return downloads
-    .filter(d => d.status === 'fulfilled')
-    .map(d => d.value)
-    .filter(buf => {
-      const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8;
-      const isPng = buf[0] === 0x89 && buf[1] === 0x50;
-      return isJpeg || isPng;
-    });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Image selection — library first, then Serper + Claude Vision
-// ═══════════════════════════════════════════════════════════════
-async function fetchStepImages(step, imgDir, _tutorialTitle, emit) {
-  const stepNum = String(step.step).padStart(2, '0');
-  const primaryQuery = step.imageQuery || `${step.title} screenshot`;
-  emit('screenshot:search', { step: step.step, query: primaryQuery });
-
-  // ── Layer 0: Check image library for pre-validated matches ──
-  const libraryMatches = await findImages(primaryQuery, 3);
-  if (libraryMatches.length > 0) {
-    const best = libraryMatches[0]; // highest scored match
-    const mainFile = `step-${stepNum}.png`;
-    fs.writeFileSync(path.join(imgDir, mainFile), best.buffer);
-    await markUsed(best.hash);
-
-    step.screenshot = mainFile;
-    step.candidates = [];
-    step.validCandidates = [];
-    step.picked = 0;
-    step.fromLibrary = true;
-
-    // If the library image has cached annotation data, carry it forward
-    if (best.annotationData) {
-      step._cachedAnnotation = best.annotationData;
-    }
-
-    emit('screenshot:library', { step: step.step, score: best.score, site: best.site, uses: best.uses });
-    emit('screenshot:done', { step: step.step, picked: 1, total: 1, valid: 1, candidates: [], fromLibrary: true });
-    return true;
-  }
-
-  // ── Layer 1+2: Serper search (cached) + download ──
-  const allImages = await searchAndDownload(primaryQuery, 8);
-  if (allImages.length === 0) return false;
-
-  const candidates = (await downloadImages(allImages)).slice(0, 5);
-  if (candidates.length === 0) return false;
-
-  const candidateFiles = [];
-  candidates.forEach((buf, i) => {
-    const ext = buf[0] === 0x89 ? 'png' : 'jpg';
-    const file = `step-${stepNum}-c${i + 1}.${ext}`;
-    fs.writeFileSync(path.join(imgDir, file), buf);
-    candidateFiles.push(file);
-  });
-
-  // ── Layer 3: Claude Vision pick (cached by query + image hashes) ──
-  const imageHashes = candidates.map(buf => hashBuffer(buf));
-  const pickCacheKey = hashKey(normalize(primaryQuery), ...imageHashes);
-
-  let picked = 0;
-  let validCandidates = candidateFiles;
-
-  const cachedPick = await cacheGet('image_pick', pickCacheKey);
-  if (cachedPick) {
-    picked = cachedPick.value.picked;
-    const cachedValid = cachedPick.value.validIndices;
-    if (cachedValid && cachedValid.length > 0) {
-      validCandidates = cachedValid.filter(n => n < candidateFiles.length).map(n => candidateFiles[n]);
-    }
-    emit('screenshot:cached', { step: step.step });
-  } else {
-    try {
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 150,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              ...candidates.map((buf) => ({
-                type: 'image',
-                source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
-              })),
-              {
-                type: 'text',
-                text: `Pick the best screenshot for tutorial step: "${step.title}" — "${step.description || ''}".
-You see ${candidates.length} images (1-${candidates.length}).
-Pick the real UI screenshot that best matches this step. Reject illustrations, logos, stock photos, old designs.
-
-Reply EXACTLY:
-VALID: 1,3,5
-BEST: 3
-
-If none valid: VALID: NONE / BEST: 0`,
-              },
-            ],
-          },
-        ],
-      });
-
-      const text = response.content[0].text.trim();
-
-      const validLine = text.match(/VALID:\s*(.+)/i);
-      if (validLine) {
-        const validStr = validLine[1].trim();
-        if (validStr === 'NONE') {
-          validCandidates = [];
-        } else {
-          const validNums = validStr.match(/\d+/g)?.map(n => parseInt(n) - 1).filter(n => n >= 0 && n < candidates.length) || [];
-          if (validNums.length > 0) {
-            validCandidates = validNums.map(n => candidateFiles[n]);
-          }
-        }
-      }
-
-      const bestLine = text.match(/BEST:\s*(\d+)/i);
-      if (bestLine) {
-        const choice = parseInt(bestLine[1]) - 1;
-        if (choice >= 0 && choice < candidates.length) {
-          picked = choice;
-        } else if (validCandidates.length > 0) {
-          picked = candidateFiles.indexOf(validCandidates[0]);
-        }
-      }
-
-      if (validCandidates.length > 0 && !validCandidates.includes(candidateFiles[picked])) {
-        picked = candidateFiles.indexOf(validCandidates[0]);
-      }
-
-      const validIndices = validCandidates.map(f => candidateFiles.indexOf(f));
-      await cacheSet('image_pick', pickCacheKey, { picked, validIndices }, null, 7);
-    } catch (err) {
-      console.error(`Vision pick error step ${step.step}:`, err.message);
-    }
-  }
-
-  // Copy picked as main screenshot
-  const mainFile = `step-${stepNum}.png`;
-  fs.copyFileSync(path.join(imgDir, candidateFiles[picked]), path.join(imgDir, mainFile));
-
-  // ── Save validated images to library for future reuse ──
-  const validIndicesForLib = validCandidates.map(f => candidateFiles.indexOf(f)).filter(i => i >= 0);
-  for (const idx of validIndicesForLib) {
-    await saveImage(candidates[idx], primaryQuery, {
-      validated: true,
-      tags: [normalize(step.title)].concat(normalize(step.description || '').split(' ').filter(w => w.length > 2)),
-    });
-  }
-
-  step.screenshot = mainFile;
-  step.candidates = candidateFiles;
-  step.validCandidates = validCandidates;
-  step.picked = picked;
-
-  emit('screenshot:done', {
-    step: step.step,
-    picked: picked + 1,
-    total: candidates.length,
-    valid: validCandidates.length,
-    candidates: candidateFiles,
-  });
-  return true;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Annotate screenshot (cached by image hash + step description)
-// ═══════════════════════════════════════════════════════════════
-async function annotateScreenshot(step, imgDir, _tutorialTitle, emit) {
-  const stepNum = String(step.step).padStart(2, '0');
-  const mainFile = `step-${stepNum}.png`;
-  const mainPath = path.join(imgDir, mainFile);
-  if (!fs.existsSync(mainPath)) return;
-
-  const buf = fs.readFileSync(mainPath);
-  const metadata = await sharp(buf).metadata();
-  const imgW = metadata.width || 1280;
-  const imgH = metadata.height || 720;
-
-  // Cache key: hash of image content + step text
-  const imgHash = hashBuffer(buf);
-  const annoCacheKey = hashKey(imgHash, normalize(step.title + ' ' + (step.description || '')));
-
-  let boxData = null;
-
-  // Check: library annotation from fetchStepImages
-  if (step._cachedAnnotation) {
-    boxData = step._cachedAnnotation;
-    delete step._cachedAnnotation;
-    emit('screenshot:annotated:cached', { step: step.step, source: 'library' });
-  }
-
-  // Check: TTL cache
-  if (!boxData) {
-    const cachedAnno = await cacheGet('annotation', annoCacheKey);
-    if (cachedAnno) {
-      boxData = cachedAnno.value;
-      emit('screenshot:annotated:cached', { step: step.step, source: 'cache' });
-    }
-  }
-
-  if (!boxData) {
-    // Ask Claude to identify the UI region to highlight
-    try {
-      const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 100,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: detectMime(buf), data: buf.toString('base64') },
-            },
-            {
-              type: 'text',
-              text: `Step: "${step.title}" — "${step.description || ''}"
-Find the UI element for this step. Reply EXACTLY:
-BOX: x1%,y1%,x2%,y2%
-LABEL: short label
-Or: NONE`,
-            },
-          ],
-        }],
-      });
-
-      const text = response.content[0].text.trim();
-      if (text === 'NONE' || !text.includes('BOX:')) return;
-
-      const boxMatch = text.match(/BOX:\s*([\d.]+)%\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
-      const labelMatch = text.match(/LABEL:\s*(.+)/i);
-      if (!boxMatch) return;
-
-      boxData = {
-        x1p: parseFloat(boxMatch[1]),
-        y1p: parseFloat(boxMatch[2]),
-        x2p: parseFloat(boxMatch[3]),
-        y2p: parseFloat(boxMatch[4]),
-        label: labelMatch ? labelMatch[1].trim().slice(0, 30) : '',
-      };
-
-      await cacheSet('annotation', annoCacheKey, boxData, null, 30);
-
-      // Save annotation data back to image library for future reuse
-      await saveImage(buf, step.imageQuery || step.title, { annotationData: boxData });
-    } catch (err) {
-      console.error(`Annotation error step ${step.step}:`, err.message);
-      return;
-    }
-  }
-
-  if (!boxData) return;
-
-  // Render the annotation with Sharp
-  const x1 = Math.round((boxData.x1p / 100) * imgW);
-  const y1 = Math.round((boxData.y1p / 100) * imgH);
-  const x2 = Math.round((boxData.x2p / 100) * imgW);
-  const y2 = Math.round((boxData.y2p / 100) * imgH);
-  const label = boxData.label || '';
-
-  const bx = Math.max(0, Math.min(x1, x2));
-  const by = Math.max(0, Math.min(y1, y2));
-  const bw = Math.min(Math.abs(x2 - x1), imgW - bx);
-  const bh = Math.min(Math.abs(y2 - y1), imgH - by);
-
-  if (bw < 10 || bh < 10) return;
-
-  const padding = 4;
-  const strokeWidth = 3;
-  const fontSize = Math.max(14, Math.min(20, Math.round(imgH / 40)));
-  const labelH = fontSize + 10;
-  const labelW = Math.min(label.length * (fontSize * 0.6) + 16, imgW - 10);
-  const labelX = Math.max(4, Math.min(bx, imgW - labelW - 4));
-  const labelYAbove = by - labelH - 4;
-  const labelYBelow = by + bh + 4;
-  const labelY = labelYAbove >= 0 ? labelYAbove : (labelYBelow + labelH <= imgH ? labelYBelow : Math.max(0, by - labelH));
-
-  const escSvg = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-  const rx = Math.max(0, bx - padding);
-  const ry = Math.max(0, by - padding);
-  const rw = Math.min(bw + padding * 2, imgW - rx);
-  const rh = Math.min(bh + padding * 2, imgH - ry);
-
-  let svgOverlay = `<svg width="${imgW}" height="${imgH}">
-      <rect x="${rx}" y="${ry}" width="${rw}" height="${rh}"
-            rx="6" ry="6" fill="none" stroke="#6366f1" stroke-width="${strokeWidth}" />
-      <rect x="${Math.max(0, rx - 1)}" y="${Math.max(0, ry - 1)}" width="${Math.min(rw + 2, imgW)}" height="${Math.min(rh + 2, imgH)}"
-            rx="7" ry="7" fill="none" stroke="rgba(99,102,241,0.3)" stroke-width="${strokeWidth + 4}" />`;
-
-  if (label) {
-    svgOverlay += `
-      <rect x="${labelX}" y="${labelY}" width="${labelW}" height="${labelH}" rx="4" ry="4" fill="#6366f1" />
-      <text x="${labelX + 8}" y="${labelY + fontSize + 2}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${escSvg(label)}</text>`;
-  }
-
-  svgOverlay += `</svg>`;
-
-  const annotated = await sharp(buf)
-    .composite([{ input: Buffer.from(svgOverlay), gravity: 'northwest' }])
-    .png()
-    .toBuffer();
-
-  const annotatedFile = `step-${stepNum}-annotated.png`;
-  fs.writeFileSync(path.join(imgDir, annotatedFile), annotated);
-  fs.writeFileSync(mainPath, annotated);
-
-  step.annotated = true;
-  step.highlightLabel = label;
-  emit('screenshot:annotated', { step: step.step, label });
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Fetch ALL step images in parallel
-// ═══════════════════════════════════════════════════════════════
-async function fetchAllImages(steps, imgDir, tutorialTitle, emit = () => {}) {
-  emit('research:screenshots:start', { total: steps.length });
-
-  const results = await Promise.all(
-    steps.map(step => fetchStepImages(step, imgDir, tutorialTitle, emit))
-  );
-
-  const count = results.filter(Boolean).length;
-  emit('research:screenshots:done', { count });
-
-  emit('annotation:start', { total: count });
-  await Promise.all(
-    steps.filter(s => s.screenshot).map(step => annotateScreenshot(step, imgDir, tutorialTitle, emit))
-  );
-  emit('annotation:done', {});
-
-  return count;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -508,21 +173,200 @@ async function generateTTS(text, outputPath) {
   return outputPath;
 }
 
-function concatenateVideos(clipPaths, outputPath) {
+async function concatenateVideos(clipPaths, outputPath) {
   const listFile = outputPath.replace('.mp4', '-list.txt');
-  fs.writeFileSync(listFile, clipPaths.map(p => `file '${p}'`).join('\n'));
-  execSync(
-    `ffmpeg -y -f concat -safe 0 -i "${listFile}" -c:v libx264 -c:a aac -movflags +faststart "${outputPath}"`,
-    { stdio: 'ignore', timeout: 120000 }
-  );
-  fs.unlinkSync(listFile);
+  // Use forward slashes inside the list file for reliability on Windows ffmpeg.
+  const listBody = clipPaths
+    .map((p) => `file '${p.replace(/\\/g, '/')}'`)
+    .join('\n');
+  fs.writeFileSync(listFile, listBody);
+  try {
+    await runFFmpeg([
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listFile,
+      '-c:v', 'libx264',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-pix_fmt', 'yuv420p',
+      '-r', '24',
+      '-movflags', '+faststart',
+      outputPath,
+    ], 180000);
+  } finally {
+    try { fs.unlinkSync(listFile); } catch {}
+  }
   return outputPath;
+}
+
+// Build ffmpeg args for a single image+audio clip, with a ShowMeHow watermark
+// overlaid top-right. Uses api/assets/logo.png if present; otherwise falls
+// back to drawtext so the pipeline never depends on the logo being there.
+const LOGO_PATH = path.resolve(__dirname, '..', 'assets', 'logo.jpeg');
+
+function buildClipArgs({ bgImage, ttsFile, clipFile, paddedDuration }) {
+  const common = [
+    '-c:v', 'libx264',
+    '-tune', 'stillimage',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-pix_fmt', 'yuv420p',
+    '-t', paddedDuration.toFixed(3),
+    '-r', '24',
+    '-shortest',
+    clipFile,
+  ];
+
+  // Base scale+pad must produce strictly even dims; filter_complex (multi-
+  // input) is stricter about this than -vf and libx264 rejects odd heights.
+  const bgFilter = '[0:v]scale=1280:720:force_original_aspect_ratio=decrease:force_divisible_by=2,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1';
+
+  if (fs.existsSync(LOGO_PATH)) {
+    return [
+      '-y',
+      '-loop', '1',
+      '-i', bgImage,
+      '-i', ttsFile,
+      '-i', LOGO_PATH,
+      '-filter_complex',
+        `${bgFilter}[bg];[2:v]scale=320:-2[logo];[bg][logo]overlay=W-w:H-h[v]`,
+      '-map', '[v]', '-map', '1:a',
+      ...common,
+    ];
+  }
+
+  // Drawtext fallback. Windows gets an explicit font path; other platforms
+  // use ffmpeg's default font (fontconfig).
+  const drawtextBase = 'drawtext=text=ShowMeHow:fontcolor=white:fontsize=48:x=W-tw:y=H-th:box=1:boxcolor=black@0.4:boxborderw=12';
+  const drawtext = process.platform === 'win32'
+    ? drawtextBase + ':fontfile=/Windows/Fonts/arial.ttf'
+    : drawtextBase;
+
+  return [
+    '-y',
+    '-loop', '1',
+    '-i', bgImage,
+    '-i', ttsFile,
+    '-filter_complex',
+      `${bgFilter},${drawtext}[v]`,
+    '-map', '[v]', '-map', '1:a',
+    ...common,
+  ];
+}
+
+// Run async fn across items in batches of N (avoids overloading Windows with
+// too many concurrent ffmpeg processes).
+async function runInBatches(items, batchSize, fn) {
+  const results = [];
+  const totalBatches = Math.ceil(items.length / batchSize);
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn));
+    results.push(...batchResults);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    console.log(`[FFmpeg] Batch ${batchNum}/${totalBatches} done`);
+  }
+  return results;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Strip scraper noise before TTS rewrite
+// ═══════════════════════════════════════════════════════════════
+function cleanStepText(text) {
+  if (!text) return '';
+  let t = text;
+
+  // Inline bracket refs: [1], [2], [edit], [citation needed]
+  t = t.replace(/\[[^\]]{1,30}\]/g, ' ');
+
+  // WikiHow expert-source / attribution noise
+  t = t.replace(/X\s+Expert Source[\s\S]*?(?=\.\s|$)/gi, ' ');
+  t = t.replace(/X\s+Research source/gi, ' ');
+  t = t.replace(/X\s+Trustworthy Source[\s\S]*?(?=\.\s|$)/gi, ' ');
+  t = t.replace(/wikiHow Staff Editor/gi, ' ');
+  t = t.replace(/Co-authored by[^.]*\./gi, ' ');
+  t = t.replace(/Thanks!\s*Helpful[\s\S]*?Not Helpful[^.]*\.?/gi, ' ');
+  t = t.replace(/Helpful\s+\d+\s+Not Helpful\s+\d+/gi, ' ');
+
+  // Inline JS/tracking fragments that sometimes leak through
+  t = t.replace(/WH\.performance\.[a-zA-Z]+\([^)]*\);?/g, ' ');
+  t = t.replace(/\{"smallUrl":[\s\S]*?\}/g, ' ');
+
+  // Collapse whitespace
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // Drop sentence fragments shorter than 15 chars (likely noise)
+  const sentences = t.split(/(?<=[.!?])\s+/).filter((s) => s.trim().length >= 15);
+  if (sentences.length > 0) t = sentences.join(' ');
+
+  return t.trim();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Rewrite raw scraped step text into natural TTS narration (cached)
+// ═══════════════════════════════════════════════════════════════
+async function rewriteNarration(text, topic = '') {
+  const cleaned = cleanStepText(text);
+
+  const cacheKey = hashKey(normalize(cleaned || text || '') + '|' + normalize(topic));
+  const cached = await cacheGet('script', `narration:${cacheKey}`);
+  if (cached && cached.value?.narration) return cached.value.narration;
+
+  try {
+    const res = await client.chat.completions.create({
+      model: TEXT_MODEL,
+      max_tokens: 120,
+      messages: [{
+        role: 'user',
+        content: `Rewrite this tutorial step into natural spoken narration for a video voiceover.
+Rules:
+- 1 to 2 sentences maximum
+- Conversational and clear, as if a friendly tutor is explaining
+- Never start with "Step X", "First", or "Next"
+- Present tense
+- Return ONLY the narration text, no quotes, no preamble
+- If the input text is unclear, incomplete, or seems like website noise (author bios, rating widgets, empty fragments), write a clean generic narration for a tutorial step about "${topic || 'the topic'}" instead.
+
+Step text: "${(cleaned || text || '').slice(0, 600)}"`,
+      }],
+    });
+    const narration = (res.choices[0].message.content || '').replace(/^["']|["']$/g, '').trim()
+      || cleaned.slice(0, 180)
+      || `Continue with the next step of ${topic || 'the tutorial'}.`;
+    await cacheSet('script', `narration:${cacheKey}`, { narration }, null, 7);
+    return narration;
+  } catch (err) {
+    console.warn(`[narration] rewrite failed: ${err.message}`);
+    return cleaned.slice(0, 180) || `Continue with the next step of ${topic || 'the tutorial'}.`;
+  }
+}
+
+function mapScrapedToTutorial(article, topic) {
+  const steps = article.steps.map((s, i) => ({
+    step: i + 1,
+    stepNumber: s.index,
+    title: s.imageAlt?.slice(0, 60) || `Step ${i + 1}`,
+    description: s.text || '',
+    command: '',
+    explanation: '',
+    screenshot: s.screenshot || null,
+  }));
+  return {
+    title: article.title || `How to ${topic}`,
+    url: article.url,
+    intro: `Here's how to ${topic}.`,
+    outro: `And that's it — you're all set.`,
+    steps,
+    source: `Scraped from ${article.source}`,
+    sourceUrl: article.url,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
 // PHASE 1: Research — check for existing project first, then generate
 // ═══════════════════════════════════════════════════════════════
-async function runResearch(topic, emit = () => {}) {
+async function runResearch(topic, emit = () => {}, preferredSource = null) {
   const sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const sessionDir = path.join(OUT_DIR, sessionId);
   const imgDir = path.join(sessionDir, 'images');
@@ -534,21 +378,17 @@ async function runResearch(topic, emit = () => {}) {
   // ── Shortcut: check if a completed project with this topic exists ──
   const normalizedTopic = normalize(topic);
   try {
-    const existing = await Project.findOne({
-      status: 'complete',
-      sessionId: { $exists: true, $ne: null },
-    }).lean();
+    const existing = await projects.findCompletedByNormalizedTopic(normalizedTopic);
 
-    if (existing && normalize(existing.topic) === normalizedTopic && existing.sessionId) {
-      const existingDir = path.join(OUT_DIR, existing.sessionId, 'images');
+    if (existing && existing.session_id) {
+      const existingDir = path.join(OUT_DIR, existing.session_id, 'images');
       if (fs.existsSync(existingDir)) {
-        // Clone session files
         const files = fs.readdirSync(existingDir);
         for (const f of files) {
           fs.copyFileSync(path.join(existingDir, f), path.join(imgDir, f));
         }
         const tutorial = existing.tutorial;
-        emit('research:cached', { sessionId, originalSession: existing.sessionId });
+        emit('research:cached', { sessionId, originalSession: existing.session_id });
         emit('research:claude:start', {});
         emit('research:claude:done', {
           steps: tutorial.steps, intro: tutorial.intro, outro: tutorial.outro, time: Date.now() - t0,
@@ -571,19 +411,57 @@ async function runResearch(topic, emit = () => {}) {
     console.warn('[cache] Project lookup failed:', err.message);
   }
 
-  // 1. Claude generates script (cached internally)
-  emit('research:claude:start', {});
-  const tutorial = await generateScript(topic);
-  emit('research:claude:done', {
-    steps: tutorial.steps, intro: tutorial.intro, outro: tutorial.outro, time: Date.now() - t0,
-  });
+  // 1. Try scraping real tutorial articles first (WikiHow / HowToGeek / Lifewire)
+  let tutorial = null;
+  let imgCount = 0;
+  let usedScraper = false;
 
-  // 2. Fetch all images in parallel — Claude validates each one
-  const imgCount = await fetchAllImages(tutorial.steps, imgDir, tutorial.title, emit);
+  emit('scraper:source', { source: preferredSource || 'auto' });
+  try {
+    const scraped = await scrapeForTopic(topic, sessionId, emit, preferredSource);
+    const validImages = scraped?.steps?.filter((s) => s.localImagePath).length || 0;
 
-  tutorial.source = 'Serper + Claude Vision';
+    if (scraped && validImages >= 3) {
+      tutorial = mapScrapedToTutorial(scraped, topic);
+
+      emit('research:claude:start', {});
+      const narrations = await Promise.all(
+        tutorial.steps.map((s) => rewriteNarration(s.description, topic))
+      );
+      narrations.forEach((n, i) => {
+        if (n) tutorial.steps[i].description = n;
+      });
+      emit('research:claude:done', {
+        steps: tutorial.steps, intro: tutorial.intro, outro: tutorial.outro, time: Date.now() - t0,
+      });
+
+      imgCount = validImages;
+      usedScraper = true;
+      emit('annotation:done', {});
+    } else if (scraped) {
+      emit('scraper:fallback', { reason: `only ${validImages} valid images (need 3+)` });
+    } else {
+      emit('scraper:fallback', { reason: 'no article found' });
+    }
+  } catch (err) {
+    console.warn(`[Scraper Error] pipeline: ${err.message}`);
+    emit('scraper:fallback', { reason: err.message });
+  }
+
+  // 2. Fallback: GPT script + AI-generated slides (original behavior)
+  if (!usedScraper) {
+    emit('research:claude:start', {});
+    tutorial = await generateScript(topic);
+    emit('research:claude:done', {
+      steps: tutorial.steps, intro: tutorial.intro, outro: tutorial.outro, time: Date.now() - t0,
+    });
+
+    imgCount = await generateAllSlides(tutorial, topic, sessionDir, emit);
+    tutorial.source = 'AI-generated slides';
+  }
+
   const phase1Time = Date.now() - t0;
-  const result = { sessionId, tutorial, stats: { images: imgCount, phase1Time } };
+  const result = { sessionId, tutorial, stats: { images: imgCount, phase1Time, scraper: usedScraper } };
   emit('research:done', result);
   return result;
 }
@@ -612,16 +490,26 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   emit('tts:start', { total: narrations.length });
   emit('video:start', { total: narrations.length });
 
-  // Slideshow mode: TTS (cached) + screenshot → mp4
-  const pipelineResults = await Promise.all(
-    narrations.map(async (n) => {
+  const pipelineResults = await runInBatches(narrations, 4, async (n) => {
       let ttsFile;
       try {
         ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));
         emit('tts:done', { id: n.id });
       } catch (err) {
         emit('tts:error', { id: n.id, error: err.message });
-        return null;
+        // Fallback: generate a silent WAV so the slide still renders as video
+        try {
+          ttsFile = path.join(audioDir, `${n.id}.wav`);
+          const dur = Math.max(2, Math.min(12, Math.round((n.text || '').length * 0.08)));
+          await execAsync(
+            `ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t ${dur} -c:a pcm_s16le "${ttsFile}"`,
+            { timeout: 10000 }
+          );
+          emit('tts:fallback', { id: n.id, duration: dur });
+        } catch (fallbackErr) {
+          emit('tts:error', { id: n.id, error: 'fallback failed: ' + fallbackErr.message });
+          return null;
+        }
       }
 
       let bgImage = null;
@@ -636,12 +524,18 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
 
       if (bgImage && fs.existsSync(bgImage)) {
         try {
-          await execAsync(
-            `ffmpeg -y -loop 1 -i "${bgImage}" -i "${ttsFile}" ` +
-            `-filter_complex "[0:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black[v]" ` +
-            `-map "[v]" -map 1:a -c:v libx264 -c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart -shortest "${clipFile}"`,
-            { timeout: 30000 }
-          );
+          // Exact duration from the audio file + 300ms padding ensures the clip
+          // matches narration length precisely (no early cuts, no trailing black).
+          let paddedDuration;
+          try {
+            const audioDur = await getAudioDuration(ttsFile);
+            paddedDuration = audioDur + 0.3;
+          } catch (probeErr) {
+            console.warn(`[FFmpeg] ffprobe failed for ${n.id} (${probeErr.message}) — falling back to estimate`);
+            paddedDuration = Math.max(2, Math.min(15, (n.text || '').length * 0.08)) + 0.3;
+          }
+
+          await runFFmpeg(buildClipArgs({ bgImage, ttsFile, clipFile, paddedDuration }), 45000);
           emit('video:clip:done', { label: n.id, file: path.basename(clipFile), size: fs.statSync(clipFile).size });
           return clipFile;
         } catch (err) {
@@ -650,22 +544,46 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
         }
       }
       return null;
-    })
-  );
+    });
 
   const compositeClips = pipelineResults.filter(Boolean);
   emit('tts:complete', { success: compositeClips.length, time: Date.now() - t0 });
   emit('video:clips:done', { success: compositeClips.length, total: narrations.length, time: Date.now() - t0 });
 
   const finalPath = path.join(sessionDir, 'final-video.mp4');
-  if (compositeClips.length > 0) {
-    emit('video:concatenating', { clips: compositeClips.length });
+
+  // Safety check: only concat clips that actually exist and are non-empty.
+  // Per-clip ffmpeg can fail silently (timeout, OOM, Windows quirks) — build
+  // the concat list from the real filesystem state.
+  const verifiedClips = compositeClips.filter((clipPath) => {
+    if (!clipPath) return false;
     try {
-      concatenateVideos(compositeClips, finalPath);
-      emit('video:final', { file: 'final-video.mp4', size: fs.statSync(finalPath).size, clips: compositeClips.length });
+      const st = fs.statSync(clipPath);
+      if (st.size === 0) {
+        console.warn(`[FFmpeg] Missing clip ${path.basename(clipPath)} — empty file, skipping`);
+        return false;
+      }
+      return true;
+    } catch {
+      console.warn(`[FFmpeg] Missing clip ${path.basename(clipPath)} — not on disk, skipping`);
+      return false;
+    }
+  });
+
+  if (verifiedClips.length < compositeClips.length) {
+    console.warn(`[FFmpeg] Concat list: ${verifiedClips.length}/${compositeClips.length} clips survived verification`);
+  }
+
+  if (verifiedClips.length > 0) {
+    emit('video:concatenating', { clips: verifiedClips.length });
+    try {
+      await concatenateVideos(verifiedClips, finalPath);
+      emit('video:final', { file: 'final-video.mp4', size: fs.statSync(finalPath).size, clips: verifiedClips.length });
     } catch (err) {
       emit('video:error', { error: 'Concat failed: ' + err.message });
     }
+  } else {
+    emit('video:error', { error: 'No usable clips to concatenate' });
   }
 
   const phase2Time = Date.now() - t0;

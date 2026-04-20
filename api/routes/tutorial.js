@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const Project = require('../models/Project');
+const projects = require('../db/projects');
+const users = require('../db/users');
 const Anthropic = require('@anthropic-ai/sdk');
 const claude = new Anthropic();
 
 // GET /api/tutorials — list user's projects
 router.get('/', auth, async (req, res) => {
   try {
-    const projects = await Project.find({ user: req.user.id }).sort({ createdAt: -1 });
-    res.json(projects);
+    const list = await projects.listForUser(req.user.id);
+    res.json(list);
   } catch (err) {
     console.error('List projects error:', err);
     res.status(500).json({ error: 'Failed to load projects' });
@@ -19,7 +20,7 @@ router.get('/', auth, async (req, res) => {
 // GET /api/tutorials/:id — get single project
 router.get('/:id', auth, async (req, res) => {
   try {
-    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    const project = await projects.findByIdForUser(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
     res.json(project);
   } catch (err) {
@@ -28,31 +29,31 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-// POST /api/tutorials — create project (just saves topic, socket handles generation)
-// Validates user has credits (free: 3, single: purchased, pro: unlimited)
+// POST /api/tutorials — create project
 router.post('/', auth, async (req, res) => {
   try {
-    const { topic } = req.body;
+    const { topic, source } = req.body;
     if (!topic?.trim()) return res.status(400).json({ error: 'Topic is required' });
 
-    const User = require('../models/User');
-    const user = await User.findById(req.user.id);
+    const VALID_SOURCES = ['wikihow', 'howtogeek', 'lifewire', 'makeuseof', 'digitalocean', 'freecodecamp', 'geeksforgeeks', 'devto', 'auto'];
+    const chosenSource = VALID_SOURCES.includes(source) ? source : 'auto';
+
+    const user = await users.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const isPro = user.plan === 'pro' && user.planExpiresAt && user.planExpiresAt > new Date();
-    if (!isPro && user.credits <= 0) {
+    const unlimited = users.hasUnlimitedAccess(user);
+    if (!unlimited && user.credits <= 0) {
       return res.status(403).json({ error: 'No credits left. Upgrade your plan to generate more videos.' });
     }
 
-    // Deduct credit (pro users don't spend credits)
-    if (!isPro) {
-      user.credits -= 1;
-      await user.save();
+    if (!unlimited) {
+      await users.incrementCredits(user.id, -1);
     }
 
-    const project = await Project.create({
+    const project = await projects.create({
       user: req.user.id,
       topic: topic.trim(),
+      source: chosenSource,
       status: 'draft',
     });
 
@@ -63,33 +64,32 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// PUT /api/tutorials/:id/steps — update steps (user edits before video generation)
+// PUT /api/tutorials/:id/steps — update steps
 router.put('/:id/steps', auth, async (req, res) => {
   try {
     const { steps } = req.body;
     if (!steps?.length) return res.status(400).json({ error: 'Steps are required' });
 
-    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    const project = await projects.findByIdForUser(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    project.tutorial.steps = steps;
-    await project.save();
-    res.json(project);
+    const updated = await projects.updateProject(project.id, { tutorial: { steps } });
+    res.json(updated);
   } catch (err) {
     console.error('Update steps error:', err);
     res.status(500).json({ error: 'Failed to update steps' });
   }
 });
 
-// PUT /api/tutorials/:id/pick-image — user picks a different candidate image for a step
+// PUT /api/tutorials/:id/pick-image — user picks a candidate image
 router.put('/:id/pick-image', auth, async (req, res) => {
   try {
     const { stepIndex, candidateFile } = req.body;
     if (typeof stepIndex !== 'number' || stepIndex < 0) return res.status(400).json({ error: 'Invalid step index' });
 
-    const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+    const project = await projects.findByIdForUser(req.params.id, req.user.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
-    if (!project.sessionId) return res.status(400).json({ error: 'No session' });
+    if (!project.session_id) return res.status(400).json({ error: 'No session' });
 
     const step = project.tutorial?.steps?.[stepIndex];
     if (!step) return res.status(400).json({ error: 'Invalid step index' });
@@ -97,28 +97,30 @@ router.put('/:id/pick-image', auth, async (req, res) => {
 
     const fs = require('fs');
     const path = require('path');
-    const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', project.sessionId, 'images');
+    const imgDir = path.resolve(__dirname, '..', 'output', 'sessions', project.session_id, 'images');
     const stepNum = String(step.step).padStart(2, '0');
     const mainFile = `step-${stepNum}.png`;
 
     fs.copyFileSync(path.join(imgDir, candidateFile), path.join(imgDir, mainFile));
-    step.screenshot = mainFile;
-    step.picked = step.candidates.indexOf(candidateFile);
-    await project.save();
 
-    res.json({ ok: true, step: step.step, screenshot: mainFile, picked: step.picked });
+    await projects.updateStep(project.id, stepIndex, {
+      screenshot: mainFile,
+      picked: step.candidates.indexOf(candidateFile),
+    });
+
+    res.json({ ok: true, step: step.step, screenshot: mainFile, picked: step.candidates.indexOf(candidateFile) });
   } catch (err) {
     console.error('Pick image error:', err);
     res.status(500).json({ error: 'Failed to update image' });
   }
 });
 
-// POST /api/tutorials/:id/chat — RAG chat about the tutorial topic
+// POST /api/tutorials/:id/chat — RAG chat
 router.post('/:id/chat', auth, async (req, res) => {
   const { message, history } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
-  const project = await Project.findOne({ _id: req.params.id, user: req.user.id });
+  const project = await projects.findByIdForUser(req.params.id, req.user.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
   const tutorial = project.tutorial || {};
@@ -142,10 +144,9 @@ RULES:
 - If the user asks about a specific step (e.g. "explain step 3", "tell me about chapter 2"), give a focused explanation of that step and use [step:N] to link to it.
 - Answer in the same language the user writes in.`;
 
-  // Build messages from history
   const messages = [];
   if (history?.length) {
-    for (const h of history.slice(-20)) { // last 20 messages max
+    for (const h of history.slice(-20)) {
       messages.push({ role: h.role, content: h.content });
     }
   }
@@ -163,7 +164,7 @@ RULES:
       .filter(b => b.type === 'text')
       .map(b => b.text)
       .join('')
-      .replace(/<[^>]+>/g, '') // strip cite tags
+      .replace(/<[^>]+>/g, '')
       .trim();
 
     res.json({ reply: text });
@@ -176,8 +177,8 @@ RULES:
 // DELETE /api/tutorials/:id
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const project = await Project.findOneAndDelete({ _id: req.params.id, user: req.user.id });
-    if (!project) return res.status(404).json({ error: 'Project not found' });
+    const deleted = await projects.deleteProject(req.params.id, req.user.id);
+    if (!deleted) return res.status(404).json({ error: 'Project not found' });
     res.json({ message: 'Project deleted' });
   } catch (err) {
     console.error('Delete project error:', err);

@@ -1,31 +1,68 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import api from "@/lib/api";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+
+type EmailCheck = "idle" | "checking" | "available" | "taken" | "invalid";
 
 function LoginForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [isRegister, setIsRegister] = useState(
-    searchParams.get("tab") === "register"
+    searchParams.get("tab") === "register",
   );
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState(
     searchParams.get("error") === "google_failed"
       ? "Google sign-in failed. Please try again."
-      : ""
+      : "",
   );
   const [loading, setLoading] = useState(false);
+  const [emailCheck, setEmailCheck] = useState<EmailCheck>("idle");
+  const [verificationSent, setVerificationSent] = useState(false);
+
+  const supabase = createSupabaseBrowserClient();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // Debounced email availability check (register mode only)
+  useEffect(() => {
+    if (!isRegister) {
+      setEmailCheck("idle");
+      return;
+    }
+    const email = form.email.trim();
+    if (!email) {
+      setEmailCheck("idle");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setEmailCheck("invalid");
+      return;
+    }
+    setEmailCheck("checking");
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/auth/check-email?email=${encodeURIComponent(email)}`,
+        );
+        const data = await res.json();
+        setEmailCheck(data.exists ? "taken" : "available");
+      } catch {
+        setEmailCheck("idle");
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.email, isRegister]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setVerificationSent(false);
 
     if (!form.email || !form.password) {
       setError("Please fill in all fields");
@@ -38,17 +75,35 @@ function LoginForm() {
 
     setLoading(true);
     try {
-      const endpoint = isRegister ? "/api/auth/register" : "/api/auth/login";
-      const body = isRegister
-        ? { name: form.name, email: form.email, password: form.password }
-        : { email: form.email, password: form.password };
+      if (isRegister) {
+        const { data, error: signUpErr } = await supabase.auth.signUp({
+          email: form.email.trim(),
+          password: form.password,
+          options: {
+            data: { name: form.name.trim() },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+        if (signUpErr) throw signUpErr;
 
-      const { data } = await api.post(endpoint, body);
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.response?.data?.error || err.message);
+        // If email confirmation is required, no session yet.
+        if (!data.session) {
+          setVerificationSent(true);
+        } else {
+          router.push("/dashboard");
+          router.refresh();
+        }
+      } else {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: form.email.trim(),
+          password: form.password,
+        });
+        if (signInErr) throw signInErr;
+        router.push("/dashboard");
+        router.refresh();
+      }
+    } catch (err) {
+      setError((err as Error).message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -56,12 +111,58 @@ function LoginForm() {
 
   const handleGoogleLogin = async () => {
     try {
-      const { data } = await api.get("/api/auth/google");
-      window.location.href = data.url;
-    } catch {
-      setError("Could not connect to Google");
+      const { error: googleErr } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (googleErr) throw googleErr;
+    } catch (err) {
+      setError((err as Error).message || "Could not connect to Google");
     }
   };
+
+  if (verificationSent) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 flex items-center justify-center px-4">
+        <div className="bg-slate-900/80 border border-white/10 backdrop-blur rounded-2xl shadow-2xl w-full max-w-md p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-4">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              className="text-emerald-300"
+            >
+              <path d="M4 4h16v16H4z" />
+              <path d="m4 4 8 8 8-8" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Check your email</h2>
+          <p className="text-slate-400 mb-6 text-sm">
+            We sent a verification link to{" "}
+            <span className="text-white font-medium">{form.email}</span>. Click
+            the link to activate your account.
+          </p>
+          <p className="text-slate-500 text-xs mb-6">
+            Nothing in your inbox? Check your spam folder.
+          </p>
+          <button
+            onClick={() => {
+              setVerificationSent(false);
+              setIsRegister(false);
+            }}
+            className="text-indigo-400 text-sm hover:underline"
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 flex items-center justify-center px-4">
@@ -79,7 +180,6 @@ function LoginForm() {
             : "Sign in to your account"}
         </p>
 
-        {/* Google button */}
         <button
           onClick={handleGoogleLogin}
           className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white text-gray-800 font-medium rounded-xl hover:bg-gray-100 transition mb-6"
@@ -122,20 +222,47 @@ function LoginForm() {
               className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
             />
           )}
-          <input
-            type="email"
-            name="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={handleChange}
-            className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-          />
+          <div>
+            <input
+              type="email"
+              name="email"
+              placeholder="Email"
+              value={form.email}
+              onChange={handleChange}
+              className={`w-full px-4 py-3 bg-white/5 border text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 transition ${
+                isRegister && emailCheck === "taken"
+                  ? "border-red-500/50 focus:ring-red-500"
+                  : isRegister && emailCheck === "available"
+                    ? "border-emerald-500/50 focus:ring-emerald-500"
+                    : "border-white/10 focus:ring-indigo-500"
+              }`}
+            />
+            {isRegister && emailCheck === "checking" && (
+              <p className="text-slate-500 text-xs mt-1">Checking availability…</p>
+            )}
+            {isRegister && emailCheck === "available" && (
+              <p className="text-emerald-400 text-xs mt-1">✓ Email available</p>
+            )}
+            {isRegister && emailCheck === "taken" && (
+              <p className="text-red-400 text-xs mt-1">
+                This email is already registered.{" "}
+                <button
+                  type="button"
+                  onClick={() => setIsRegister(false)}
+                  className="underline hover:text-red-300"
+                >
+                  Sign in instead?
+                </button>
+              </p>
+            )}
+          </div>
           <input
             type="password"
             name="password"
             placeholder="Password"
             value={form.password}
             onChange={handleChange}
+            autoComplete={isRegister ? "new-password" : "current-password"}
             className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
           />
 
@@ -143,8 +270,8 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-50"
+            disabled={loading || (isRegister && emailCheck === "taken")}
+            className="w-full py-3 bg-indigo-500 text-white font-semibold rounded-xl hover:bg-indigo-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading
               ? "Loading..."
@@ -157,7 +284,10 @@ function LoginForm() {
         <p className="text-center text-slate-500 text-sm mt-6">
           {isRegister ? "Already have an account?" : "Don't have an account?"}{" "}
           <button
-            onClick={() => setIsRegister(!isRegister)}
+            onClick={() => {
+              setIsRegister(!isRegister);
+              setError("");
+            }}
             className="text-indigo-400 font-semibold hover:underline"
           >
             {isRegister ? "Sign in" : "Sign up"}

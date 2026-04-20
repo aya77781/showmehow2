@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
+const users = require('../db/users');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Stripe webhook — raw body required
@@ -26,20 +26,18 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         if (!userId) break;
 
         if (plan === 'single' && session.mode === 'payment') {
-          await User.findByIdAndUpdate(userId, {
-            $inc: { credits: 1 },
-            plan: 'single',
-          });
+          await users.incrementCredits(userId, 1);
+          await users.update(userId, { plan: 'single' });
           console.log(`[Stripe] User ${userId}: +1 credit (single tutorial)`);
         }
 
         if (plan === 'pro' && session.mode === 'subscription') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription);
           if (subscription) {
-            await User.findByIdAndUpdate(userId, {
+            await users.update(userId, {
               plan: 'pro',
-              stripeSubscriptionId: session.subscription,
-              planExpiresAt: new Date(subscription.current_period_end * 1000),
+              stripe_subscription_id: session.subscription,
+              plan_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
             });
             console.log(`[Stripe] User ${userId}: Pro subscription activated`);
           }
@@ -55,9 +53,9 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           const customer = await stripe.customers.retrieve(invoice.customer);
           const userId = customer?.metadata?.userId;
           if (userId && subscription) {
-            await User.findByIdAndUpdate(userId, {
+            await users.update(userId, {
               plan: 'pro',
-              planExpiresAt: new Date(subscription.current_period_end * 1000),
+              plan_expires_at: new Date(subscription.current_period_end * 1000).toISOString(),
             });
             console.log(`[Stripe] User ${userId}: Pro renewed`);
           }
@@ -71,10 +69,10 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         const customer = await stripe.customers.retrieve(subscription.customer);
         const userId = customer?.metadata?.userId;
         if (userId) {
-          await User.findByIdAndUpdate(userId, {
+          await users.update(userId, {
             plan: 'free',
-            stripeSubscriptionId: null,
-            planExpiresAt: null,
+            stripe_subscription_id: null,
+            plan_expires_at: null,
           });
           console.log(`[Stripe] User ${userId}: Subscription cancelled`);
         }
@@ -83,7 +81,6 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     }
   } catch (err) {
     console.error(`[Stripe] Webhook handler error for ${event.type}:`, err);
-    // Still return 200 to prevent Stripe from retrying
   }
 
   res.json({ received: true });

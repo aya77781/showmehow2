@@ -1,16 +1,16 @@
 const { runResearch, runVideoGeneration } = require('../services/tutorial');
-const Project = require('../models/Project');
-const jwt = require('jsonwebtoken');
+const projects = require('../db/projects');
+const supabase = require('../config/supabase');
 
 module.exports = function (io) {
-  // Auth middleware for socket connections
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      socket.userId = decoded.id;
+      const { data, error } = await supabase.auth.getUser(token);
+      if (error || !data?.user) return next(new Error('Invalid token'));
+      socket.userId = data.user.id;
       next();
     } catch {
       next(new Error('Invalid token'));
@@ -22,120 +22,134 @@ module.exports = function (io) {
 
     // ─────────────────────────────────────────────
     // PHASE 1: Research — topic → steps + images
-    // Client sends: { projectId }
-    // Server emits events as pipeline progresses
     // ─────────────────────────────────────────────
     socket.on('tutorial:research', async (data) => {
       const { projectId } = data;
 
       try {
-        const project = await Project.findOne({ _id: projectId, user: socket.userId });
+        const project = await projects.findByIdForUser(projectId, socket.userId);
         if (!project) {
           return socket.emit('error', { message: 'Project not found' });
         }
 
-        project.status = 'generating';
-        await project.save();
+        await projects.updateProject(project.id, { status: 'generating' });
 
         const emit = (event, payload) => {
           socket.emit(event, payload);
         };
 
-        const result = await runResearch(project.topic, emit);
+        const result = await runResearch(project.topic, emit, project.source || null);
 
-        // Save research results
-        project.sessionId = result.sessionId;
-        project.tutorial = result.tutorial;
-        project.stats = { phase1Time: result.stats.phase1Time };
-
-        socket.emit('tutorial:ready', {
-          projectId: project._id,
-          sessionId: project.sessionId,
-          tutorial: project.tutorial,
-          stats: project.stats,
+        const phase1Stats = { phase1Time: result.stats.phase1Time };
+        const updated = await projects.updateProject(project.id, {
+          sessionId: result.sessionId,
+          stats: phase1Stats,
+          tutorial: {
+            title: result.tutorial.title,
+            url: result.tutorial.url,
+            source: result.tutorial.source,
+            wikiUrl: result.tutorial.wikiUrl,
+            steps: result.tutorial.steps,
+          },
         });
 
-        // Auto-trigger video generation — skip manual review
-        project.status = 'video_generating';
-        await project.save();
+        socket.emit('tutorial:ready', {
+          projectId: updated.id,
+          sessionId: updated.session_id,
+          tutorial: updated.tutorial,
+          stats: updated.stats,
+        });
+
+        await projects.updateProject(project.id, { status: 'video_generating' });
 
         const videoResult = await runVideoGeneration(
-          project.sessionId,
-          project.tutorial.steps,
-          project.tutorial,
+          updated.session_id,
+          updated.tutorial.steps,
+          updated.tutorial,
           emit
         );
 
-        // Update project with video info
-        project.tutorial.steps = videoResult.steps;
-        project.status = 'complete';
-        project.stats.phase2Time = videoResult.time;
-        project.stats.totalTime = (project.stats.phase1Time || 0) + videoResult.time;
-        await project.save();
+        const totalStats = {
+          phase1Time: phase1Stats.phase1Time,
+          phase2Time: videoResult.time,
+          totalTime: (phase1Stats.phase1Time || 0) + videoResult.time,
+        };
+
+        const finalProject = await projects.updateProject(project.id, {
+          status: 'complete',
+          stats: totalStats,
+          tutorial: { steps: videoResult.steps },
+        });
 
         socket.emit('tutorial:complete', {
-          projectId: project._id,
-          sessionId: project.sessionId,
-          tutorial: project.tutorial,
-          stats: project.stats,
+          projectId: finalProject.id,
+          sessionId: finalProject.session_id,
+          tutorial: finalProject.tutorial,
+          stats: finalProject.stats,
           finalVideo: 'final-video.mp4',
         });
 
       } catch (err) {
         console.error('Research error:', err.message);
-        await Project.findByIdAndUpdate(projectId, { status: 'error', error: err.message });
+        try {
+          await projects.updateProject(projectId, { status: 'error', error: err.message });
+        } catch {}
         socket.emit('error', { message: err.message });
       }
     });
 
     // ─────────────────────────────────────────────
     // PHASE 2: Generate videos from (edited) steps
-    // Client sends: { projectId, steps? }
-    // steps is optional — if provided, uses edited steps
     // ─────────────────────────────────────────────
     socket.on('tutorial:generate-videos', async (data) => {
       const { projectId, steps } = data;
 
       try {
-        const project = await Project.findOne({ _id: projectId, user: socket.userId });
+        const project = await projects.findByIdForUser(projectId, socket.userId);
         if (!project) {
           return socket.emit('error', { message: 'Project not found' });
         }
-        if (!project.sessionId) {
+        if (!project.session_id) {
           return socket.emit('error', { message: 'Run research first' });
         }
 
-        // Use edited steps if provided, otherwise use existing
         const stepsToUse = steps || project.tutorial.steps;
 
-        project.status = 'video_generating';
-        if (steps) project.tutorial.steps = steps;
-        await project.save();
+        const patch = { status: 'video_generating' };
+        if (steps) patch.tutorial = { steps };
+        const projectInGen = await projects.updateProject(project.id, patch);
 
         const emit = (event, payload) => {
           socket.emit(event, payload);
         };
 
-        const result = await runVideoGeneration(project.sessionId, stepsToUse, project.tutorial, emit);
+        const result = await runVideoGeneration(projectInGen.session_id, stepsToUse, projectInGen.tutorial, emit);
 
-        // Update project with video info
-        project.tutorial.steps = result.steps;
-        project.status = 'complete';
-        project.stats.phase2Time = result.time;
-        project.stats.totalTime = (project.stats.phase1Time || 0) + result.time;
-        await project.save();
+        const totalStats = {
+          phase1Time: projectInGen.stats?.phase1Time || 0,
+          phase2Time: result.time,
+          totalTime: (projectInGen.stats?.phase1Time || 0) + result.time,
+        };
+
+        const finalProject = await projects.updateProject(project.id, {
+          status: 'complete',
+          stats: totalStats,
+          tutorial: { steps: result.steps },
+        });
 
         socket.emit('tutorial:complete', {
-          projectId: project._id,
-          sessionId: project.sessionId,
-          tutorial: project.tutorial,
-          stats: project.stats,
+          projectId: finalProject.id,
+          sessionId: finalProject.session_id,
+          tutorial: finalProject.tutorial,
+          stats: finalProject.stats,
           finalVideo: 'final-video.mp4',
         });
 
       } catch (err) {
         console.error('Video generation error:', err.message);
-        await Project.findByIdAndUpdate(projectId, { status: 'error', error: err.message });
+        try {
+          await projects.updateProject(projectId, { status: 'error', error: err.message });
+        } catch {}
         socket.emit('error', { message: err.message });
       }
     });

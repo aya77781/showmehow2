@@ -40,21 +40,3 @@ services:
       - key: SERPER_API_KEY
         sync: false
 
-  # ─── Frontend (Next.js) ───
-  - type: web
-    name: showmehow-client
-    runtime: node
-    plan: starter
-    region: frankfurt
-    rootDir: client
-    buildCommand: npm install && npm run build
-    startCommand: npm start
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        sync: false
-      - key: NEXT_PUBLIC_SUPABASE_URL
-        sync: false
-      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
-        sync: false

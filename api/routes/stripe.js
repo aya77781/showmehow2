@@ -12,49 +12,48 @@ router.post('/setup', async (req, res) => {
     const { webhookUrl } = req.body || {};
     const result = {};
 
+    const PACK10_NAME = 'ShowMe AI — Pack 10 Videos';
+    const PACK20_NAME = 'ShowMe AI — Pack 20 Videos';
+
     const existingProducts = await stripe.products.list({ limit: 100 });
-    const singleExists = existingProducts.data.find(p => p.name === 'ShowMe AI — Single Tutorial' && p.active);
-    const proExists = existingProducts.data.find(p => p.name === 'ShowMe AI — Pro Monthly' && p.active);
+    const pack10Exists = existingProducts.data.find(p => p.name === PACK10_NAME && p.active);
+    const pack20Exists = existingProducts.data.find(p => p.name === PACK20_NAME && p.active);
 
-    if (singleExists && proExists) {
-      const prices = await stripe.prices.list({ limit: 100, active: true });
-      const singlePrice = prices.data.find(p => p.product === singleExists.id);
-      const proPrice = prices.data.find(p => p.product === proExists.id && p.recurring);
-      result.STRIPE_PRICE_SINGLE = singlePrice?.id || 'NOT_FOUND';
-      result.STRIPE_PRICE_PRO = proPrice?.id || 'NOT_FOUND';
-      result.products = 'Already exist (skipped)';
-    } else {
-      const singleProduct = singleExists || await stripe.products.create({
-        name: 'ShowMe AI — Single Tutorial',
-        description: 'Generate one AI video tutorial with real screenshots and narration',
-      });
-      const singlePrice = await stripe.prices.create({
-        product: singleProduct.id,
-        unit_amount: 600,
+    const pack10Product = pack10Exists || await stripe.products.create({
+      name: PACK10_NAME,
+      description: '10 AI video tutorials with real screenshots and narration',
+    });
+    const pack20Product = pack20Exists || await stripe.products.create({
+      name: PACK20_NAME,
+      description: '20 AI video tutorials with real screenshots and narration',
+    });
+
+    const allPrices = await stripe.prices.list({ limit: 100, active: true });
+    let pack10Price = allPrices.data.find(p => p.product === pack10Product.id && p.unit_amount === 500 && !p.recurring);
+    let pack20Price = allPrices.data.find(p => p.product === pack20Product.id && p.unit_amount === 1000 && !p.recurring);
+
+    if (!pack10Price) {
+      pack10Price = await stripe.prices.create({
+        product: pack10Product.id,
+        unit_amount: 500,
         currency: 'eur',
       });
-
-      const proProduct = proExists || await stripe.products.create({
-        name: 'ShowMe AI — Pro Monthly',
-        description: 'Unlimited AI video tutorials per month',
-      });
-      const proPrice = await stripe.prices.create({
-        product: proProduct.id,
-        unit_amount: 1200,
-        currency: 'eur',
-        recurring: { interval: 'month' },
-      });
-
-      result.STRIPE_PRICE_SINGLE = singlePrice.id;
-      result.STRIPE_PRICE_PRO = proPrice.id;
-      result.products = 'Created';
     }
+    if (!pack20Price) {
+      pack20Price = await stripe.prices.create({
+        product: pack20Product.id,
+        unit_amount: 1000,
+        currency: 'eur',
+      });
+    }
+
+    result.STRIPE_PRICE_PACK10 = pack10Price.id;
+    result.STRIPE_PRICE_PACK20 = pack20Price.id;
+    result.products = (pack10Exists && pack20Exists) ? 'Already exist (reused)' : 'Created';
 
     if (webhookUrl) {
       const webhookEvents = [
         'checkout.session.completed',
-        'invoice.paid',
-        'customer.subscription.deleted',
       ];
 
       const existingWebhooks = await stripe.webhookEndpoints.list({ limit: 100 });
@@ -82,11 +81,17 @@ router.post('/setup', async (req, res) => {
   }
 });
 
+// ── Pack credit mapping (single source of truth) ───────────
+const PACKS = {
+  pack10: { credits: 10, amount: 500, label: 'Pack 10 Videos', priceEnv: 'STRIPE_PRICE_PACK10' },
+  pack20: { credits: 20, amount: 1000, label: 'Pack 20 Videos', priceEnv: 'STRIPE_PRICE_PACK20' },
+};
+
 // ── Get pricing info ───────────────────────────────────────
 router.get('/prices', (req, res) => {
   res.json({
-    single: { price: 6.00, currency: 'eur', label: 'Single Tutorial', priceId: process.env.STRIPE_PRICE_SINGLE },
-    pro: { price: 12.00, currency: 'eur', label: 'Pro Monthly', priceId: process.env.STRIPE_PRICE_PRO },
+    pack10: { price: 5.00, currency: 'eur', credits: 10, label: 'Pack 10 Videos', priceId: process.env.STRIPE_PRICE_PACK10 },
+    pack20: { price: 10.00, currency: 'eur', credits: 20, label: 'Pack 20 Videos', priceId: process.env.STRIPE_PRICE_PACK20 },
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
   });
 });
@@ -98,18 +103,16 @@ router.get('/status', auth, async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const unlimited = users.hasUnlimitedAccess(user);
-    const isPro = unlimited || (user.plan === 'pro' && user.plan_expires_at && new Date(user.plan_expires_at) > new Date());
-    const canGenerate = unlimited || isPro || user.credits > 0;
-    const isPaid = isPro || user.plan === 'single';
+    const credits = unlimited ? 9999 : (user.credits || 0);
+    const canGenerate = unlimited || credits > 0;
+    const isPaid = unlimited || (user.plan && user.plan !== 'free');
 
     res.json({
-      plan: isPro ? 'pro' : (user.plan === 'single' ? 'single' : 'free'),
-      credits: unlimited ? 9999 : user.credits,
-      isPro,
+      plan: unlimited ? 'unlimited' : (user.plan || 'free'),
+      credits,
       isPaid,
       canGenerate,
       canMakePrivate: isPaid,
-      planExpiresAt: user.plan_expires_at,
     });
   } catch (err) {
     console.error('Stripe status error:', err);
@@ -121,7 +124,8 @@ router.get('/status', auth, async (req, res) => {
 router.post('/checkout', auth, async (req, res) => {
   try {
     const { plan } = req.body;
-    if (plan !== 'single' && plan !== 'pro') return res.status(400).json({ error: 'Invalid plan' });
+    const pack = PACKS[plan];
+    if (!pack) return res.status(400).json({ error: 'Invalid plan' });
 
     let user = await users.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -137,14 +141,14 @@ router.post('/checkout', auth, async (req, res) => {
       user = await users.update(user.id, { stripe_customer_id: customerId });
     }
 
-    const priceId = plan === 'pro' ? process.env.STRIPE_PRICE_PRO : process.env.STRIPE_PRICE_SINGLE;
-    const mode = plan === 'pro' ? 'subscription' : 'payment';
+    const priceId = process.env[pack.priceEnv];
+    if (!priceId) return res.status(500).json({ error: `${pack.priceEnv} not configured. Run /api/stripe/setup first.` });
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      mode,
-      metadata: { userId: user.id, plan },
+      mode: 'payment',
+      metadata: { userId: user.id, plan, credits: String(pack.credits) },
       success_url: `${CLIENT_URL}/dashboard?payment=success&plan=${plan}`,
       cancel_url: `${CLIENT_URL}/pricing?payment=cancelled`,
     });
@@ -156,22 +160,5 @@ router.post('/checkout', auth, async (req, res) => {
   }
 });
 
-// ── Customer portal (manage subscription) ──────────────────
-router.post('/portal', auth, async (req, res) => {
-  try {
-    const user = await users.findById(req.user.id);
-    if (!user?.stripe_customer_id) return res.status(400).json({ error: 'No subscription' });
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripe_customer_id,
-      return_url: `${CLIENT_URL}/dashboard`,
-    });
-
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error('Stripe portal error:', err);
-    res.status(500).json({ error: 'Failed to open billing portal' });
-  }
-});
-
 module.exports = router;
+module.exports.PACKS = PACKS;

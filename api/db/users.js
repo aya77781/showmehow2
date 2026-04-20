@@ -6,10 +6,7 @@ const UNLIMITED_EMAILS = new Set([
 
 function hasUnlimitedAccess(user) {
   if (!user) return false;
-  if (UNLIMITED_EMAILS.has((user.email || '').toLowerCase())) return true;
-  return user.plan === 'pro'
-    && user.plan_expires_at
-    && new Date(user.plan_expires_at) > new Date();
+  return UNLIMITED_EMAILS.has((user.email || '').toLowerCase());
 }
 
 async function findById(id) {

@@ -138,7 +138,7 @@ function Dashboard() {
   const [pubSlug, setPubSlug] = useState<string | null>(null);
 
   // Plan status
-  const [planStatus, setPlanStatus] = useState<{ plan: string; credits: number; isPro: boolean; isPaid: boolean; canGenerate: boolean; canMakePrivate: boolean } | null>(null);
+  const [planStatus, setPlanStatus] = useState<{ plan: string; credits: number; isPaid: boolean; canGenerate: boolean; canMakePrivate: boolean } | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -524,7 +524,7 @@ function Dashboard() {
             <div>
               <p className="text-green-400 text-sm font-semibold">Payment successful!</p>
               <p className="text-green-400/60 text-xs">
-                {paymentToast.plan === "pro" ? "Pro plan activated — unlimited tutorials" : "1 credit added — generate your tutorial now"}
+                {paymentToast.plan === "pack20" ? "20 credits added — generate your tutorials now" : paymentToast.plan === "pack10" ? "10 credits added — generate your tutorials now" : "Credits added — generate your tutorial now"}
               </p>
             </div>
             <button onClick={() => setPaymentToast(null)} className="text-green-400/40 hover:text-green-400 ml-2">
@@ -680,12 +680,12 @@ function Dashboard() {
                 </div>
 
                 <div className="flex items-center gap-3 sm:float-right">
-                  {planStatus && !planStatus.isPro && planStatus.canGenerate && (
+                  {planStatus && planStatus.canGenerate && planStatus.credits < 9999 && (
                     <span className="text-xs text-slate-500">
                       {planStatus.credits} video{planStatus.credits !== 1 ? "s" : ""} left
                     </span>
                   )}
-                  {planStatus?.isPro && <span className="text-xs text-indigo-400">Pro — Unlimited</span>}
+                  {planStatus && planStatus.credits >= 9999 && <span className="text-xs text-indigo-400">Unlimited</span>}
                   {planStatus && !planStatus.canGenerate ? (
                     <a
                       href="/pricing"

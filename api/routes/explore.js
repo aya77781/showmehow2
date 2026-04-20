@@ -134,7 +134,7 @@ router.put('/:id/visibility', auth, async (req, res) => {
 
     if (!isPublic) {
       const user = await users.findById(req.user.id);
-      const isPaid = users.hasUnlimitedAccess(user) || user.plan === 'single';
+      const isPaid = users.hasUnlimitedAccess(user) || (user.plan && user.plan !== 'free');
       if (!isPaid) {
         return res.status(403).json({ error: 'Upgrade to a paid plan to make videos private. Free videos are always public for SEO.' });
       }

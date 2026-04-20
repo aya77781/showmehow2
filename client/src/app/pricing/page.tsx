@@ -11,31 +11,31 @@ const plans = [
     name: "Free",
     price: "0",
     period: "",
-    description: "Get started free",
-    features: ["3 video tutorials", "AI script generation", "Real screenshots + highlights", "Download MP4", "Videos are public (SEO)"],
+    description: "Try it out",
+    features: ["1 video tutorial", "AI script generation", "Real screenshots + highlights", "Download MP4", "Videos are public (SEO)"],
     cta: "Current Plan",
     popular: false,
     disabled: true,
   },
   {
-    id: "single",
-    name: "Single Tutorial",
-    price: "6",
+    id: "pack10",
+    name: "Pack 10 Videos",
+    price: "5",
     period: "one-time",
-    description: "Pay per video",
-    features: ["1 extra video tutorial", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private"],
+    description: "Best for getting started",
+    features: ["10 video tutorials", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private"],
     cta: "Buy Now",
     popular: false,
     disabled: false,
   },
   {
-    id: "pro",
-    name: "Pro",
-    price: "12",
-    period: "/month",
-    description: "Unlimited tutorials",
-    features: ["Unlimited video tutorials", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation", "Cancel anytime"],
-    cta: "Subscribe",
+    id: "pack20",
+    name: "Pack 20 Videos",
+    price: "10",
+    period: "one-time",
+    description: "Best value",
+    features: ["20 video tutorials", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation"],
+    cta: "Buy Now",
     popular: true,
     disabled: false,
   },
@@ -84,13 +84,6 @@ function PricingInner() {
     }
   };
 
-  const handlePortal = async () => {
-    try {
-      const { data } = await api.post("/api/stripe/portal");
-      window.location.href = data.url;
-    } catch {}
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
@@ -99,9 +92,6 @@ function PricingInner() {
           <a href="/dashboard" className="text-lg sm:text-xl font-bold">ShowMe<span className="text-indigo-400">How</span><span className="text-indigo-300 font-normal text-[0.7em]">.ai</span></a>
           {isLoggedIn ? (
             <div className="flex items-center gap-3">
-              {userPlan?.isPro && (
-                <button onClick={handlePortal} className="text-xs text-slate-500 hover:text-slate-300 transition">Manage subscription</button>
-              )}
               <a href="/dashboard" className="px-3 py-1.5 text-sm bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition">Dashboard</a>
             </div>
           ) : (
@@ -197,8 +187,8 @@ function PricingInner() {
           <h2 className="text-xl font-bold text-center mb-6">FAQ</h2>
           <div className="space-y-4">
             {[
-              { q: "What do I get with a single tutorial?", a: "One complete AI-generated video tutorial: Claude writes the script, finds and validates real screenshots, highlights key UI elements, and an AI avatar narrates everything. You download the final MP4." },
-              { q: "Can I cancel Pro anytime?", a: "Yes, cancel anytime from your account. You keep access until the end of your billing period." },
+              { q: "What do I get with a video tutorial?", a: "One complete AI-generated video tutorial: Claude writes the script, finds and validates real screenshots, highlights key UI elements, and an AI avatar narrates everything. You download the final MP4." },
+              { q: "Do credits expire?", a: "No — credits never expire. Buy a pack and use the videos whenever you want." },
               { q: "What payment methods do you accept?", a: "All major credit/debit cards via Stripe. Apple Pay and Google Pay are also supported." },
             ].map(({ q, a }) => (
               <details key={q} className="group border border-white/5 rounded-xl bg-white/[0.02]">

@@ -490,7 +490,7 @@ async function runVideoGeneration(sessionId, steps, tutorial, emit = () => {}) {
   emit('tts:start', { total: narrations.length });
   emit('video:start', { total: narrations.length });
 
-  const pipelineResults = await runInBatches(narrations, 4, async (n) => {
+  const pipelineResults = await runInBatches(narrations, 2, async (n) => {
       let ttsFile;
       try {
         ttsFile = await generateTTS(n.text, path.join(audioDir, `${n.id}.wav`));

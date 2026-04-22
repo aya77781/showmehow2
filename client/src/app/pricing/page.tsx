@@ -12,31 +12,50 @@ const plans = [
     price: "0",
     period: "",
     description: "Try it out",
+    perVideo: null,
     features: ["1 video tutorial", "AI script generation", "Real screenshots + highlights", "Download MP4", "Videos are public (SEO)"],
     cta: "Current Plan",
     popular: false,
+    badge: null,
     disabled: true,
   },
   {
     id: "pack10",
-    name: "Pack 10 Videos",
+    name: "Starter",
     price: "5",
     period: "one-time",
-    description: "Best for getting started",
+    description: "Try the full experience",
+    perVideo: "0.50€/video",
     features: ["10 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private"],
-    cta: "Buy Now",
+    cta: "Buy Starter",
     popular: false,
+    badge: null,
     disabled: false,
   },
   {
-    id: "pack20",
-    name: "Pack 20 Videos",
-    price: "10",
+    id: "pro",
+    name: "Pro",
+    price: "12",
     period: "one-time",
-    description: "Best value",
-    features: ["20 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation"],
-    cta: "Buy Now",
+    description: "Most popular",
+    perVideo: "0.40€/video",
+    features: ["30 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation"],
+    cta: "Buy Pro",
     popular: true,
+    badge: "Save 20%",
+    disabled: false,
+  },
+  {
+    id: "studio",
+    name: "Studio",
+    price: "25",
+    period: "one-time",
+    description: "For creators & teams",
+    perVideo: "0.33€/video",
+    features: ["75 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation", "Best price per video"],
+    cta: "Buy Studio",
+    popular: false,
+    badge: "Save 33%",
     disabled: false,
   },
 ];
@@ -115,7 +134,7 @@ function PricingInner() {
         )}
 
         {/* Plans */}
-        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-6xl mx-auto">
           {plans.map((plan) => {
             const isCurrent = userPlan?.plan === plan.id;
             return (
@@ -128,8 +147,13 @@ function PricingInner() {
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider rounded-full">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-wider rounded-full whitespace-nowrap">
                     Most Popular
+                  </div>
+                )}
+                {plan.badge && !plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider rounded-full whitespace-nowrap">
+                    {plan.badge}
                   </div>
                 )}
 
@@ -139,8 +163,13 @@ function PricingInner() {
                 </div>
 
                 <div className="mb-5">
-                  <span className="text-4xl font-bold">&euro;{plan.price}</span>
-                  <span className="text-slate-500 text-sm ml-1">{plan.period}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold">&euro;{plan.price}</span>
+                    <span className="text-slate-500 text-sm">{plan.period}</span>
+                  </div>
+                  {plan.perVideo && (
+                    <p className="text-xs text-emerald-400 mt-1 font-medium">{plan.perVideo}</p>
+                  )}
                 </div>
 
                 <ul className="space-y-2.5 mb-6 flex-1">

@@ -487,11 +487,12 @@ export default function Landing() {
             <p className="text-slate-400 mt-4">Pay per video or go unlimited. No hidden fees.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               { name: "Free", price: "0", period: "", features: ["1 video tutorial", "AI script generation", "Real screenshots", "Download MP4"], cta: "Get Started", highlight: false },
-              { name: "Pack 10", price: "5", period: "one-time", features: ["10 video tutorials", "AI voice narration", "Real screenshots", "Download MP4", "AI chat tutor", "Make videos private"], cta: "Buy Pack 10", highlight: false },
-              { name: "Pack 20", price: "10", period: "one-time", features: ["20 video tutorials", "AI voice narration", "Real screenshots", "Download MP4", "AI chat tutor", "Make videos private", "Priority rendering"], cta: "Buy Pack 20", highlight: true },
+              { name: "Starter", price: "5", period: "one-time", features: ["10 video tutorials", "AI voice narration", "Real screenshots", "Download MP4", "AI chat tutor", "Make videos private"], cta: "Buy Starter", highlight: false },
+              { name: "Pro", price: "12", period: "one-time", features: ["30 video tutorials", "Save 20% per video", "AI voice narration", "Real screenshots", "AI chat tutor", "Make videos private", "Priority rendering"], cta: "Buy Pro", highlight: true },
+              { name: "Studio", price: "25", period: "one-time", features: ["75 video tutorials", "Save 33% per video", "AI voice narration", "Real screenshots", "AI chat tutor", "Make videos private", "Priority rendering"], cta: "Buy Studio", highlight: false },
             ].map((plan, i) => (
               <div key={i} className={`relative rounded-2xl p-6 transition ${
                 plan.highlight

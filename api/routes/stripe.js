@@ -83,15 +83,19 @@ router.post('/setup', async (req, res) => {
 
 // ── Pack credit mapping (single source of truth) ───────────
 const PACKS = {
-  pack10: { credits: 10, amount: 500, label: 'Pack 10 Videos', priceEnv: 'STRIPE_PRICE_PACK10' },
+  pack10: { credits: 10, amount: 500, label: 'Starter Pack — 10 Videos', priceEnv: 'STRIPE_PRICE_PACK10' },
+  pro: { credits: 30, amount: 1200, label: 'Pro Pack — 30 Videos', priceEnv: 'STRIPE_PRICE_PRO' },
+  studio: { credits: 75, amount: 2500, label: 'Studio Pack — 75 Videos', priceEnv: 'STRIPE_PRICE_STUDIO' },
+  // Legacy: kept so any in-flight pack20 webhooks still grant credits
   pack20: { credits: 20, amount: 1000, label: 'Pack 20 Videos', priceEnv: 'STRIPE_PRICE_PACK20' },
 };
 
 // ── Get pricing info ───────────────────────────────────────
 router.get('/prices', (req, res) => {
   res.json({
-    pack10: { price: 5.00, currency: 'eur', credits: 10, label: 'Pack 10 Videos', priceId: process.env.STRIPE_PRICE_PACK10 },
-    pack20: { price: 10.00, currency: 'eur', credits: 20, label: 'Pack 20 Videos', priceId: process.env.STRIPE_PRICE_PACK20 },
+    pack10: { price: 5.00, currency: 'eur', credits: 10, label: 'Starter Pack', priceId: process.env.STRIPE_PRICE_PACK10 },
+    pro: { price: 12.00, currency: 'eur', credits: 30, label: 'Pro Pack', priceId: process.env.STRIPE_PRICE_PRO },
+    studio: { price: 25.00, currency: 'eur', credits: 75, label: 'Studio Pack', priceId: process.env.STRIPE_PRICE_STUDIO },
     publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
   });
 });

@@ -703,7 +703,7 @@ function Dashboard() {
 
               {planStatus && !planStatus.canGenerate && (
                 <div className="mt-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-sm text-center">
-                  You&apos;ve used your 3 free videos. <a href="/pricing" className="underline font-medium hover:text-amber-300">See plans &rarr;</a>
+                  You&apos;ve used your free video. <a href="/pricing" className="underline font-medium hover:text-amber-300">See plans &rarr;</a>
                 </div>
               )}
 

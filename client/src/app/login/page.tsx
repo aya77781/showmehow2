@@ -266,6 +266,14 @@ function LoginForm() {
             className="w-full px-4 py-3 bg-white/5 border border-white/10 text-white placeholder-slate-500 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
           />
 
+          {!isRegister && (
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-xs text-slate-400 hover:text-indigo-300 transition">
+                Forgot password?
+              </Link>
+            </div>
+          )}
+
           {error && <p className="text-red-400 text-sm">{error}</p>}
 
           <button

@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export default function AdminLoginPage() {
@@ -105,6 +106,13 @@ function AdminLoginInner() {
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
+
+            <Link
+              href="/forgot-password"
+              className="block text-center text-xs text-slate-400 hover:text-indigo-300 transition"
+            >
+              Forgot password?
+            </Link>
           </form>
         </div>
       </div>

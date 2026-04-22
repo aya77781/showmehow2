@@ -54,8 +54,24 @@ const projects = require('../db/projects');
 const client = new OpenAI();
 const TEXT_MODEL = 'gpt-4o-mini';
 
-// ── ElevenLabs TTS ──
+// ── TTS providers ──
 const ELEVENLABS_KEYS = [process.env.ELEVENLABS_API_KEY, process.env.ELEVENLABS_API_KEY_BACKUP].filter(Boolean);
+const TTS_PROVIDER = (process.env.TTS_PROVIDER || 'openai').toLowerCase();
+const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'nova';
+
+async function openAITTS(text, outputPath) {
+  const cleanText = text.replace(/<[^>]+>/g, '');
+  const res = await client.audio.speech.create({
+    model: 'tts-1',
+    voice: OPENAI_TTS_VOICE,
+    input: cleanText,
+    response_format: 'mp3',
+  });
+  const buf = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(outputPath, buf);
+  console.log(`[TTS] OpenAI succeeded (${cleanText.length} chars)`);
+  return outputPath;
+}
 
 async function elevenLabsTTS(text, outputPath) {
   const cleanText = text.replace(/<[^>]+>/g, '');
@@ -155,10 +171,6 @@ Return ONLY valid JSON:
 // TTS — ElevenLabs (cached by text hash)
 // ═══════════════════════════════════════════════════════════════
 async function generateTTS(text, outputPath) {
-  if (ELEVENLABS_KEYS.length === 0) {
-    throw new Error('No ElevenLabs key configured');
-  }
-
   const cacheKey = hashKey(normalize(text));
   const cached = await cacheGet('tts', cacheKey);
   if (cached && cached.buffer) {
@@ -166,7 +178,16 @@ async function generateTTS(text, outputPath) {
     return outputPath;
   }
 
-  await elevenLabsTTS(text, outputPath);
+  if (TTS_PROVIDER === 'elevenlabs' && ELEVENLABS_KEYS.length > 0) {
+    try {
+      await elevenLabsTTS(text, outputPath);
+    } catch (err) {
+      console.warn(`[TTS] ElevenLabs failed, falling back to OpenAI: ${err.message}`);
+      await openAITTS(text, outputPath);
+    }
+  } else {
+    await openAITTS(text, outputPath);
+  }
 
   const audioBuf = fs.readFileSync(outputPath);
   await cacheSet('tts', cacheKey, null, audioBuf, 30);

@@ -56,7 +56,7 @@ const TEXT_MODEL = 'gpt-4o-mini';
 
 // ── TTS providers ──
 const ELEVENLABS_KEYS = [process.env.ELEVENLABS_API_KEY, process.env.ELEVENLABS_API_KEY_BACKUP].filter(Boolean);
-const TTS_PROVIDER = (process.env.TTS_PROVIDER || 'openai').toLowerCase();
+const TTS_PROVIDER = (process.env.TTS_PROVIDER || (ELEVENLABS_KEYS.length > 0 ? 'elevenlabs' : 'openai')).toLowerCase();
 const OPENAI_TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'nova';
 
 async function openAITTS(text, outputPath) {

@@ -4,7 +4,7 @@ const auth = require('../middleware/auth');
 const users = require('../db/users');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+const CLIENT_URL = (process.env.CLIENT_URL || 'http://localhost:3000').trim();
 
 // ── Setup: Create Stripe products + prices + webhook (run once) ──────
 router.post('/setup', async (req, res) => {
@@ -141,7 +141,7 @@ router.post('/checkout', auth, async (req, res) => {
       user = await users.update(user.id, { stripe_customer_id: customerId });
     }
 
-    const priceId = process.env[pack.priceEnv];
+    const priceId = (process.env[pack.priceEnv] || '').trim();
     if (!priceId) return res.status(500).json({ error: `${pack.priceEnv} not configured. Run /api/stripe/setup first.` });
 
     const session = await stripe.checkout.sessions.create({

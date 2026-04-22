@@ -266,7 +266,7 @@ function Dashboard() {
 
     socket.on("research:claude:start", () => {
       finishLastLog();
-      addLog("Claude generating tutorial script with web search...", "active");
+      addLog("AI generating tutorial script with web search...", "active");
     });
     socket.on("research:claude:done", ({ steps: s, time }) => {
       finishLastLog();
@@ -543,7 +543,7 @@ function Dashboard() {
             <div className="space-y-4 mb-8">
               {[
                 { num: "1", title: "Type any topic", desc: "\"How to deploy on Vercel\", \"How to create a GitHub repo\"... anything." },
-                { num: "2", title: "AI researches & builds", desc: "Claude writes the script, finds real screenshots, and validates every image." },
+                { num: "2", title: "AI researches & builds", desc: "AI writes the script, finds real screenshots, and validates every image." },
                 { num: "3", title: "Get your video", desc: "An AI voice narrates your tutorial. Download, share, or publish it." },
               ].map((s) => (
                 <div key={s.num} className="flex items-start gap-4">
@@ -719,7 +719,7 @@ function Dashboard() {
               {projects.length === 0 && !topic && (
                 <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
-                    { icon: "🔍", title: "AI Research", desc: "Claude searches the web and writes a structured script" },
+                    { icon: "🔍", title: "AI Research", desc: "AI searches the web and writes a structured script" },
                     { icon: "📸", title: "Screenshots", desc: "AI finds and validates real screenshots for each step" },
                     { icon: "🎬", title: "Video", desc: "An AI voice narrates the tutorial on video" },
                   ].map((s, i) => (
@@ -744,7 +744,7 @@ function Dashboard() {
                 </h2>
                 <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
                   {phase === "researching"
-                    ? "Claude is writing a script, then searching and validating screenshots..."
+                    ? "AI is writing a script, then searching and validating screenshots..."
                     : "Creating clips, compositing, and building your final video..."}
                 </p>
                 <p className="text-indigo-400 text-sm font-medium mt-2 truncate max-w-lg mx-auto">&ldquo;{topic}&rdquo;</p>

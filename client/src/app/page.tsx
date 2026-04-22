@@ -260,7 +260,7 @@ export default function Landing() {
             <div className="space-y-6">
               {[
                 { icon: icons.pencil, label: "You type a topic", color: "from-indigo-500 to-indigo-600", time: "0s" },
-                { icon: icons.search, label: "Claude researches with web search", color: "from-blue-500 to-cyan-500", time: "~15s" },
+                { icon: icons.search, label: "AI researches with web search", color: "from-blue-500 to-cyan-500", time: "~15s" },
                 { icon: icons.fileText, label: "AI writes step-by-step script", color: "from-cyan-500 to-teal-500", time: "~20s" },
                 { icon: icons.image, label: "Serper finds real screenshots", color: "from-teal-500 to-emerald-500", time: "~25s" },
                 { icon: icons.mic, label: "ElevenLabs generates narration", color: "from-emerald-500 to-green-500", time: "~40s" },
@@ -304,7 +304,7 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
-              { icon: icons.eye, iconColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", title: "Real screenshots, not mockups", desc: "AI searches the web for actual UI screenshots and validates them with Claude Vision. What you see is the real product.", tag: "AI Vision", tagColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
+              { icon: icons.eye, iconColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", title: "Real screenshots, not mockups", desc: "AI searches the web for actual UI screenshots and validates them with vision AI. What you see is the real product.", tag: "AI Vision", tagColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
               { icon: icons.mic, iconColor: "text-purple-400 bg-purple-500/10 border-purple-500/20", title: "Natural AI voice", desc: "A clear, natural-sounding AI voice narrates every step. It feels like a private tutor walking you through the process.", tag: "Personalized", tagColor: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
               { icon: icons.zap, iconColor: "text-amber-400 bg-amber-500/10 border-amber-500/20", title: "Ready in under 2 min", desc: "The entire pipeline runs in ~90 seconds. Research, screenshots, audio, and video compositing — all automatic.", tag: "Fast", tagColor: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
               { icon: icons.messageCircle, iconColor: "text-green-400 bg-green-500/10 border-green-500/20", title: "AI tutor chat", desc: "After watching, ask follow-up questions. The AI has full context about the tutorial and can search the web for answers.", tag: "Interactive", tagColor: "text-green-400 bg-green-500/10 border-green-500/20" },
@@ -425,13 +425,13 @@ export default function Landing() {
               <p className="text-cyan-400 text-sm font-medium uppercase tracking-widest mb-3">AI Vision</p>
               <h2 className="text-3xl md:text-4xl font-bold mb-4">Not just any screenshot — the <span className="text-cyan-400">best</span> one</h2>
               <p className="text-slate-400 leading-relaxed mb-6">
-                For each step, our pipeline searches multiple image candidates, then uses Claude Vision to validate and pick the most relevant screenshot.
+                For each step, our pipeline searches multiple image candidates, then uses AI vision to validate and pick the most relevant screenshot.
                 No stock photos. No mockups. Real UI from real products.
               </p>
               <div className="space-y-3">
                 {[
                   "Serper Image Search finds candidates",
-                  "Claude Vision validates each image",
+                  "AI vision validates each image",
                   "Best match is auto-selected",
                   "You can manually pick alternatives",
                 ].map((t, i) => (

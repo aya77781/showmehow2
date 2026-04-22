@@ -187,7 +187,7 @@ function PricingInner() {
           <h2 className="text-xl font-bold text-center mb-6">FAQ</h2>
           <div className="space-y-4">
             {[
-              { q: "What do I get with a video tutorial?", a: "One complete AI-generated video tutorial: Claude writes the script, finds and validates real screenshots, highlights key UI elements, and an AI voice narrates everything. You download the final MP4." },
+              { q: "What do I get with a video tutorial?", a: "One complete AI-generated video tutorial: AI writes the script, finds and validates real screenshots, highlights key UI elements, and an AI voice narrates everything. You download the final MP4." },
               { q: "Do credits expire?", a: "No — credits never expire. Buy a pack and use the videos whenever you want." },
               { q: "What payment methods do you accept?", a: "All major credit/debit cards via Stripe. Apple Pay and Google Pay are also supported." },
             ].map(({ q, a }) => (

@@ -263,7 +263,7 @@ export default function Landing() {
                 { icon: icons.search, label: "AI researches with web search", color: "from-blue-500 to-cyan-500", time: "~15s" },
                 { icon: icons.fileText, label: "AI writes step-by-step script", color: "from-cyan-500 to-teal-500", time: "~20s" },
                 { icon: icons.image, label: "Serper finds real screenshots", color: "from-teal-500 to-emerald-500", time: "~25s" },
-                { icon: icons.mic, label: "ElevenLabs generates narration", color: "from-emerald-500 to-green-500", time: "~40s" },
+                { icon: icons.mic, label: "Generating narration", color: "from-emerald-500 to-green-500", time: "~40s" },
                 { icon: icons.mic, label: "AI voice records narration", color: "from-green-500 to-lime-500", time: "~60s" },
                 { icon: icons.film, label: "FFmpeg composites final video", color: "from-lime-500 to-yellow-500", time: "~90s" },
               ].map((p, i) => (

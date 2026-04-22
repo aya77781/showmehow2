@@ -23,7 +23,7 @@ const plans = [
     price: "5",
     period: "one-time",
     description: "Best for getting started",
-    features: ["10 video tutorials", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private"],
+    features: ["10 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private"],
     cta: "Buy Now",
     popular: false,
     disabled: false,
@@ -34,7 +34,7 @@ const plans = [
     price: "10",
     period: "one-time",
     description: "Best value",
-    features: ["20 video tutorials", "AI avatar narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation"],
+    features: ["20 video tutorials", "AI voice narration", "Real screenshots + highlights", "Download MP4", "AI chat tutor", "Make videos private", "Priority generation"],
     cta: "Buy Now",
     popular: true,
     disabled: false,
@@ -104,7 +104,7 @@ function PricingInner() {
         <div className="text-center mb-8 sm:mb-12">
           <h1 className="text-3xl sm:text-4xl font-bold mb-3">Simple pricing</h1>
           <p className="text-slate-400 text-base sm:text-lg max-w-xl mx-auto">
-            Generate AI video tutorials with real screenshots and avatar narration. Pay per video or go unlimited.
+            Generate AI video tutorials with real screenshots and AI voice narration. One-time packs, no subscription.
           </p>
         </div>
 
@@ -187,7 +187,7 @@ function PricingInner() {
           <h2 className="text-xl font-bold text-center mb-6">FAQ</h2>
           <div className="space-y-4">
             {[
-              { q: "What do I get with a video tutorial?", a: "One complete AI-generated video tutorial: Claude writes the script, finds and validates real screenshots, highlights key UI elements, and an AI avatar narrates everything. You download the final MP4." },
+              { q: "What do I get with a video tutorial?", a: "One complete AI-generated video tutorial: Claude writes the script, finds and validates real screenshots, highlights key UI elements, and an AI voice narrates everything. You download the final MP4." },
               { q: "Do credits expire?", a: "No — credits never expire. Buy a pack and use the videos whenever you want." },
               { q: "What payment methods do you accept?", a: "All major credit/debit cards via Stripe. Apple Pay and Google Pay are also supported." },
             ].map(({ q, a }) => (

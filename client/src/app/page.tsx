@@ -172,7 +172,7 @@ export default function Landing() {
 
           <p className="mt-6 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
             Type a topic. Get a personalized video tutorial with real screenshots,
-            AI narration, and a talking-head avatar — in under 2 minutes.
+            AI voice narration — in under 2 minutes.
           </p>
 
           {/* Fake input with typing animation */}
@@ -264,7 +264,7 @@ export default function Landing() {
                 { icon: icons.fileText, label: "AI writes step-by-step script", color: "from-cyan-500 to-teal-500", time: "~20s" },
                 { icon: icons.image, label: "Serper finds real screenshots", color: "from-teal-500 to-emerald-500", time: "~25s" },
                 { icon: icons.mic, label: "ElevenLabs generates narration", color: "from-emerald-500 to-green-500", time: "~40s" },
-                { icon: icons.user, label: "AI avatar records talking-head", color: "from-green-500 to-lime-500", time: "~60s" },
+                { icon: icons.mic, label: "AI voice records narration", color: "from-green-500 to-lime-500", time: "~60s" },
                 { icon: icons.film, label: "FFmpeg composites final video", color: "from-lime-500 to-yellow-500", time: "~90s" },
               ].map((p, i) => (
                 <div key={i} className="relative flex items-center gap-5 md:gap-6 group">
@@ -305,8 +305,8 @@ export default function Landing() {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
               { icon: icons.eye, iconColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", title: "Real screenshots, not mockups", desc: "AI searches the web for actual UI screenshots and validates them with Claude Vision. What you see is the real product.", tag: "AI Vision", tagColor: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" },
-              { icon: icons.user, iconColor: "text-purple-400 bg-purple-500/10 border-purple-500/20", title: "Your own AI avatar", desc: "A personalized talking-head avatar narrates every step. It feels like having a private tutor sitting next to you.", tag: "Personalized", tagColor: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
-              { icon: icons.zap, iconColor: "text-amber-400 bg-amber-500/10 border-amber-500/20", title: "Ready in under 2 min", desc: "The entire pipeline runs in ~90 seconds. Research, screenshots, audio, avatar, and video compositing — all automatic.", tag: "Fast", tagColor: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+              { icon: icons.mic, iconColor: "text-purple-400 bg-purple-500/10 border-purple-500/20", title: "Natural AI voice", desc: "A clear, natural-sounding AI voice narrates every step. It feels like a private tutor walking you through the process.", tag: "Personalized", tagColor: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
+              { icon: icons.zap, iconColor: "text-amber-400 bg-amber-500/10 border-amber-500/20", title: "Ready in under 2 min", desc: "The entire pipeline runs in ~90 seconds. Research, screenshots, audio, and video compositing — all automatic.", tag: "Fast", tagColor: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
               { icon: icons.messageCircle, iconColor: "text-green-400 bg-green-500/10 border-green-500/20", title: "AI tutor chat", desc: "After watching, ask follow-up questions. The AI has full context about the tutorial and can search the web for answers.", tag: "Interactive", tagColor: "text-green-400 bg-green-500/10 border-green-500/20" },
               { icon: icons.globe, iconColor: "text-pink-400 bg-pink-500/10 border-pink-500/20", title: "Share & explore", desc: "Publish your tutorials to the Explore feed. Discover what others are learning. Build a public knowledge base.", tag: "Community", tagColor: "text-pink-400 bg-pink-500/10 border-pink-500/20" },
             ].map((f, i) => (
@@ -489,9 +489,9 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-3 gap-5">
             {[
-              { name: "Free", price: "0", period: "", features: ["1 demo tutorial", "AI script generation", "Screenshot preview", "AI chat tutor"], cta: "Get Started", highlight: false },
-              { name: "Per Video", price: "6", period: "/ video", features: ["Full video tutorial", "AI avatar narration", "Real screenshots", "Download MP4", "AI chat tutor", "Publish to Explore"], cta: "Buy a Video", highlight: false },
-              { name: "Pro", price: "12", period: "/ month", features: ["Unlimited tutorials", "AI avatar narration", "Real screenshots", "Download MP4", "AI chat tutor", "Publish to Explore", "Priority rendering", "Cancel anytime"], cta: "Go Pro", highlight: true },
+              { name: "Free", price: "0", period: "", features: ["1 video tutorial", "AI script generation", "Real screenshots", "Download MP4"], cta: "Get Started", highlight: false },
+              { name: "Pack 10", price: "5", period: "one-time", features: ["10 video tutorials", "AI voice narration", "Real screenshots", "Download MP4", "AI chat tutor", "Make videos private"], cta: "Buy Pack 10", highlight: false },
+              { name: "Pack 20", price: "10", period: "one-time", features: ["20 video tutorials", "AI voice narration", "Real screenshots", "Download MP4", "AI chat tutor", "Make videos private", "Priority rendering"], cta: "Buy Pack 20", highlight: true },
             ].map((plan, i) => (
               <div key={i} className={`relative rounded-2xl p-6 transition ${
                 plan.highlight

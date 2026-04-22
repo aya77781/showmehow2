@@ -320,12 +320,6 @@ function Dashboard() {
     });
 
     // ── PHASE 2: Video generation events ──
-    socket.on("avatar:start", () => addLog("Generating AI avatar...", "active"));
-    socket.on("avatar:done", ({ reused }) => {
-      finishLastLog();
-      addLog(reused ? "Avatar loaded from cache" : "Avatar generated");
-    });
-
     socket.on("tts:start", ({ total }) => addLog(`Generating ${total} audio narrations...`, "active"));
     socket.on("tts:done", ({ id }) => setVideoProgress(p => ({ ...p, [`tts:${id}`]: "done" })));
     socket.on("tts:error", ({ id }) => setVideoProgress(p => ({ ...p, [`tts:${id}`]: "error" })));
@@ -336,7 +330,7 @@ function Dashboard() {
 
     socket.on("video:start", ({ total }) => {
       setPhase("generating_videos");
-      addLog(`Rendering ${total} talking-head clips...`, "active");
+      addLog(`Rendering ${total} video clips...`, "active");
     });
     socket.on("video:clip:progress", ({ label, status }) => {
       setVideoProgress(p => ({ ...p, [label]: status }));
@@ -349,10 +343,10 @@ function Dashboard() {
     });
     socket.on("video:clips:done", ({ success, total, time }) => {
       finishLastLog();
-      addLog(`${success}/${total} avatar clips rendered (${fmtMs(time)})`);
+      addLog(`${success}/${total} clips rendered (${fmtMs(time)})`);
     });
 
-    socket.on("video:compositing", ({ total }) => addLog(`Compositing ${total} clips (screenshot + avatar)...`, "active"));
+    socket.on("video:compositing", ({ total }) => addLog(`Compositing ${total} clips...`, "active"));
     socket.on("video:composite:done", ({ label }) => setVideoProgress(p => ({ ...p, [`comp:${label}`]: "done" })));
 
     socket.on("video:concatenating", ({ clips }) => {
@@ -550,7 +544,7 @@ function Dashboard() {
               {[
                 { num: "1", title: "Type any topic", desc: "\"How to deploy on Vercel\", \"How to create a GitHub repo\"... anything." },
                 { num: "2", title: "AI researches & builds", desc: "Claude writes the script, finds real screenshots, and validates every image." },
-                { num: "3", title: "Get your video", desc: "An AI avatar narrates your tutorial. Download, share, or publish it." },
+                { num: "3", title: "Get your video", desc: "An AI voice narrates your tutorial. Download, share, or publish it." },
               ].map((s) => (
                 <div key={s.num} className="flex items-start gap-4">
                   <div className="w-8 h-8 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 text-sm font-bold shrink-0">{s.num}</div>
@@ -727,7 +721,7 @@ function Dashboard() {
                   {[
                     { icon: "🔍", title: "AI Research", desc: "Claude searches the web and writes a structured script" },
                     { icon: "📸", title: "Screenshots", desc: "AI finds and validates real screenshots for each step" },
-                    { icon: "🎬", title: "Video", desc: "Your AI avatar narrates the tutorial on video" },
+                    { icon: "🎬", title: "Video", desc: "An AI voice narrates the tutorial on video" },
                   ].map((s, i) => (
                     <div key={i} className="bg-white/[0.02] border border-white/5 rounded-xl p-5 text-center">
                       <p className="text-2xl mb-2">{s.icon}</p>
@@ -751,7 +745,7 @@ function Dashboard() {
                 <p className="text-slate-500 text-sm mt-1 max-w-md mx-auto">
                   {phase === "researching"
                     ? "Claude is writing a script, then searching and validating screenshots..."
-                    : "Creating avatar clips, compositing, and building your final video..."}
+                    : "Creating clips, compositing, and building your final video..."}
                 </p>
                 <p className="text-indigo-400 text-sm font-medium mt-2 truncate max-w-lg mx-auto">&ldquo;{topic}&rdquo;</p>
               </div>

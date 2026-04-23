@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Modal } from "@/app/admin/_components/Modal";
 
+type Plan = "free" | "pack10" | "pack20" | "pro" | "studio";
+
 interface AdminUser {
   id: string;
   name: string | null;
   email: string;
   picture: string | null;
-  plan: "free" | "single" | "pro";
+  plan: Plan;
   credits: number;
   is_admin: boolean;
   plan_expires_at: string | null;
@@ -18,8 +20,10 @@ interface AdminUser {
 
 const PLAN_COLORS: Record<string, string> = {
   free: "bg-slate-500/20 text-slate-300 border-slate-500/30",
-  single: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+  pack10: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+  pack20: "bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
   pro: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  studio: "bg-purple-500/20 text-purple-300 border-purple-500/30",
 };
 
 function formatDate(d?: string | null) {
@@ -275,12 +279,14 @@ function EditUserModal({
         <Field label="Plan">
           <select
             value={plan}
-            onChange={(e) => setPlan(e.target.value as AdminUser["plan"])}
+            onChange={(e) => setPlan(e.target.value as Plan)}
             className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="free">free</option>
-            <option value="single">single</option>
-            <option value="pro">pro</option>
+            <option value="pack10">pack10 (Starter — 5€)</option>
+            <option value="pro">pro (12€)</option>
+            <option value="studio">studio (25€)</option>
+            <option value="pack20">pack20 (legacy)</option>
           </select>
         </Field>
         <Field label="Credits">

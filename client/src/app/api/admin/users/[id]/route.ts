@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/supabase/admin-guard";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
-const ALLOWED_PLANS = new Set(["free", "single", "pro"]);
+const ALLOWED_PLANS = new Set(["free", "pack10", "pack20", "pro", "studio"]);
 
 export async function PATCH(
   request: NextRequest,

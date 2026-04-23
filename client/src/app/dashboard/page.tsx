@@ -108,7 +108,7 @@ function Dashboard() {
 
   // Flow state
   const [topic, setTopic] = useState("");
-  const [source, setSource] = useState<"auto" | "wikihow" | "howtogeek" | "lifewire" | "digitalocean" | "freecodecamp" | "geeksforgeeks" | "devto">("auto");
+  const source = "auto" as const;
   const [phase, setPhase] = useState<Phase>("idle");
   const [current, setCurrent] = useState<Project | null>(null);
   const [sessionId, setSessionId] = useState("");
@@ -645,33 +645,6 @@ function Dashboard() {
                   placeholder="e.g. How to deploy a Next.js app on Vercel"
                   className="w-full px-5 py-4 bg-white/[0.03] border border-white/10 text-white text-base md:text-lg placeholder-slate-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500/40 transition"
                 />
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <span className="text-xs text-slate-500 self-center mr-1">Source:</span>
-                  {([
-                    { id: "auto", label: "🌐 Auto" },
-                    { id: "wikihow", label: "WikiHow" },
-                    { id: "howtogeek", label: "HowToGeek" },
-                    { id: "lifewire", label: "Lifewire" },
-                    { id: "digitalocean", label: "DigitalOcean" },
-                    { id: "freecodecamp", label: "freeCodeCamp" },
-                    { id: "geeksforgeeks", label: "GeeksForGeeks" },
-                    { id: "devto", label: "dev.to" },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => setSource(opt.id)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition ${
-                        source === opt.id
-                          ? "bg-indigo-500/20 border-indigo-400/40 text-indigo-200"
-                          : "bg-white/[0.02] border-white/5 text-slate-400 hover:bg-white/[0.05] hover:text-slate-200"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
 
                 <div className="flex items-center gap-3 sm:float-right">
                   {planStatus && planStatus.canGenerate && planStatus.credits < 9999 && (

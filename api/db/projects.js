@@ -23,6 +23,7 @@ function shapeProject(row) {
     ...rest,
     _id: row.id,
     isPublic: row.is_public,
+    isFeatured: row.is_featured,
     createdAt: row.created_at,
     sessionId: row.session_id,
     tutorial: {
@@ -143,6 +144,7 @@ async function updateProject(id, patch) {
   if (patch.sessionId !== undefined) row.session_id = patch.sessionId;
   if (patch.stats !== undefined) row.stats = patch.stats;
   if (patch.isPublic !== undefined) row.is_public = patch.isPublic;
+  if (patch.isFeatured !== undefined) row.is_featured = patch.isFeatured;
   if (patch.category !== undefined) row.category = patch.category;
   if (patch.tags !== undefined) row.tags = patch.tags;
   if (patch.views !== undefined) row.views = patch.views;
@@ -270,7 +272,7 @@ async function listPublic({ category, search, sort, page, limit }) {
   let query = supabase
     .from('projects')
     .select('*, project_steps(*), users:user_id (id, name, picture)', { count: 'exact' })
-    .eq('is_public', true)
+    .eq('is_featured', true)
     .eq('status', 'complete');
 
   if (category && category !== 'all') query = query.eq('category', category);

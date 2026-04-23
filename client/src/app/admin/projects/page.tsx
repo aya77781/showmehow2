@@ -9,6 +9,7 @@ interface AdminProject {
   source: string | null;
   status: string;
   is_public: boolean;
+  is_featured: boolean;
   views: number;
   likes: number;
   created_at: string;
@@ -64,7 +65,7 @@ export default function ProjectsPage() {
         ...(status ? { status } : {}),
         ...(source ? { source } : {}),
       });
-      const res = await fetch(`/api/admin/projects?${params}`);
+      const res = await fetch(`/api/admin/projects?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load");
       setProjects(json.projects);
@@ -142,7 +143,7 @@ export default function ProjectsPage() {
                 <th className="text-left px-4 py-3 font-medium">Source</th>
                 <SortTh label="Views" col="views" sort={sort} dir={dir} onClick={toggleSort} />
                 <SortTh label="Likes" col="likes" sort={sort} dir={dir} onClick={toggleSort} />
-                <th className="text-center px-4 py-3 font-medium">Public</th>
+                <th className="text-center px-4 py-3 font-medium">Featured</th>
                 <SortTh
                   label="Created"
                   col="created_at"
@@ -184,11 +185,7 @@ export default function ProjectsPage() {
                     <td className="px-4 py-3 text-right tabular-nums">{p.views}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{p.likes}</td>
                     <td className="px-4 py-3 text-center">
-                      {p.is_public ? (
-                        <span className="text-emerald-400 text-xs">Yes</span>
-                      ) : (
-                        <span className="text-slate-600 text-xs">No</span>
-                      )}
+                      <FeatureToggle project={p} onChange={load} />
                     </td>
                     <td className="px-4 py-3 text-slate-400">{formatDate(p.created_at)}</td>
                     <td className="px-4 py-3 text-right">
@@ -229,6 +226,54 @@ export default function ProjectsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function FeatureToggle({
+  project,
+  onChange,
+}: {
+  project: AdminProject;
+  onChange: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const featured = project.is_featured;
+  const canFeature = project.status === "complete";
+
+  async function toggle() {
+    if (!canFeature || busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_featured: !featured }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Failed");
+      onChange();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canFeature) {
+    return <span className="text-slate-600 text-xs">—</span>;
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      className={`inline-flex items-center px-2 py-0.5 rounded-md border text-xs font-medium transition disabled:opacity-50 ${
+        featured
+          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30"
+          : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/10"
+      }`}
+    >
+      {busy ? "…" : featured ? "Published" : "Publish"}
+    </button>
   );
 }
 

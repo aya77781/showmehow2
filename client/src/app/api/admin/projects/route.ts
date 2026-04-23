@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   let query = admin
     .from("projects")
     .select(
-      "id, topic, source, status, is_public, views, likes, created_at, user_id, users(email)",
+      "id, topic, source, status, is_public, is_featured, views, likes, created_at, user_id, users(email)",
       { count: "exact" },
     )
     .order(sortCol, { ascending: dir === "asc" })

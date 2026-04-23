@@ -59,6 +59,7 @@ export async function PATCH(
     updates.status = body.status;
   }
   if (typeof body.is_public === "boolean") updates.is_public = body.is_public;
+  if (typeof body.is_featured === "boolean") updates.is_featured = body.is_featured;
 
   if (Object.keys(updates).length === 0) {
     return Response.json({ error: "No valid fields to update" }, { status: 400 });

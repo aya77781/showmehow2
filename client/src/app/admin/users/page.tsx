@@ -55,7 +55,7 @@ export default function UsersPage() {
         pageSize: String(pageSize),
         ...(search ? { search } : {}),
       });
-      const res = await fetch(`/api/admin/users?${params}`);
+      const res = await fetch(`/api/admin/users?${params}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Failed to load");
       setUsers(json.users);

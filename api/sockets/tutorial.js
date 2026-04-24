@@ -1,6 +1,30 @@
 const { runResearch, runVideoGeneration } = require('../services/tutorial');
 const projects = require('../db/projects');
+const users = require('../db/users');
 const supabase = require('../config/supabase');
+
+// Refund the credit consumed when the project was created, but only once
+// (a project that already errored stays refunded — re-running won't duplicate).
+async function refundCredit(projectId, userId) {
+  if (!projectId || !userId) return;
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('credit_refunded')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (error || !data || data.credit_refunded) return;
+
+    const user = await users.findById(userId);
+    if (!user || users.hasUnlimitedAccess(user)) return;
+
+    await users.incrementCredits(userId, 1);
+    await projects.updateProject(projectId, { creditRefunded: true });
+    console.log(`[Refund] +1 credit to ${userId} (project ${projectId} failed)`);
+  } catch (err) {
+    console.error('[Refund] Failed:', err.message);
+  }
+}
 
 module.exports = function (io) {
   io.use(async (socket, next) => {
@@ -94,6 +118,7 @@ module.exports = function (io) {
         try {
           await projects.updateProject(projectId, { status: 'error', error: err.message });
         } catch {}
+        await refundCredit(projectId, socket.userId);
         socket.emit('error', { message: err.message });
       }
     });
@@ -150,6 +175,7 @@ module.exports = function (io) {
         try {
           await projects.updateProject(projectId, { status: 'error', error: err.message });
         } catch {}
+        await refundCredit(projectId, socket.userId);
         socket.emit('error', { message: err.message });
       }
     });

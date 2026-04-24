@@ -145,6 +145,7 @@ async function updateProject(id, patch) {
   if (patch.stats !== undefined) row.stats = patch.stats;
   if (patch.isPublic !== undefined) row.is_public = patch.isPublic;
   if (patch.isFeatured !== undefined) row.is_featured = patch.isFeatured;
+  if (patch.creditRefunded !== undefined) row.credit_refunded = patch.creditRefunded;
   if (patch.category !== undefined) row.category = patch.category;
   if (patch.tags !== undefined) row.tags = patch.tags;
   if (patch.views !== undefined) row.views = patch.views;
